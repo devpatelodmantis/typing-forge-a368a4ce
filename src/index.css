@@ -122,6 +122,57 @@
     @apply font-mono text-2xl md:text-3xl leading-relaxed tracking-wide;
   }
 
+  /* Character state styles - Monkeytype-style */
+  .char-correct {
+    color: hsl(var(--foreground));
+    background-color: hsl(142 71% 45% / 0.25);
+    border-radius: 2px;
+  }
+  
+  .dark .char-correct {
+    background-color: hsl(142 71% 35% / 0.4);
+  }
+
+  .char-error {
+    color: hsl(var(--foreground));
+    background-color: hsl(0 72% 51% / 0.3);
+    border-radius: 2px;
+  }
+  
+  .dark .char-error {
+    background-color: hsl(0 72% 45% / 0.4);
+  }
+
+  .char-current {
+    color: hsl(var(--primary));
+    position: relative;
+  }
+
+  .char-upcoming {
+    color: hsl(var(--typing-upcoming));
+    opacity: 0.7;
+  }
+  
+  .char-upcoming-space {
+    color: hsl(var(--typing-upcoming));
+    opacity: 0.5;
+    font-size: 0.8em;
+    vertical-align: middle;
+  }
+
+  /* Shake animation for errors */
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-4px); }
+    40% { transform: translateX(4px); }
+    60% { transform: translateX(-3px); }
+    80% { transform: translateX(3px); }
+  }
+  
+  .animate-shake {
+    animation: shake 0.15s ease-out 1;
+  }
+
   .typing-char-correct {
     @apply text-typing-correct;
   }
