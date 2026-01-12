@@ -5,6 +5,7 @@ import { Footer } from '@/components/layout/Footer';
 import { TestSettings } from '@/components/typing/TestSettings';
 import { TypingArea } from '@/components/typing/TypingArea';
 import { ResultsScreen } from '@/components/typing/ResultsScreen';
+import { KeybrLessonMode } from '@/components/keybr/KeybrLessonMode';
 import { useTestStore } from '@/stores/test-store';
 import { type TypingStats } from '@/lib/typing-engine';
 import { generateRandomWords, getRandomQuote } from '@/lib/quotes';
@@ -50,10 +51,12 @@ const Index = () => {
           {/* Title */}
           <div className="text-center mb-8">
             <h1 className="text-3xl md:text-4xl font-bold mb-2">
-              Test your typing speed
+              {settings.mode === 'keybr' ? 'Adaptive Learning' : 'Test your typing speed'}
             </h1>
             <p className="text-muted-foreground">
-              Choose your mode and start typing to begin the test
+              {settings.mode === 'keybr' 
+                ? 'Master each letter with intelligent practice - unlock new letters as you improve'
+                : 'Choose your mode and start typing to begin the test'}
             </p>
           </div>
           
@@ -62,7 +65,9 @@ const Index = () => {
           
           {/* Main Content */}
           <AnimatePresence mode="wait">
-            {status === 'finished' && results ? (
+            {settings.mode === 'keybr' ? (
+              <KeybrLessonMode key="keybr" />
+            ) : status === 'finished' && results ? (
               <ResultsScreen 
                 key="results"
                 stats={results} 

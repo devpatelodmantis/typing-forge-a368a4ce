@@ -1,0 +1,386 @@
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { RotateCcw, Sparkles, Trophy, Zap } from 'lucide-react';
+import { 
+  generateKeybrLesson,
+  calculatePerCharMetrics,
+  updateCharacterProgress,
+  type Keystroke,
+  type KeybrLesson
+} from '@/lib/keybr-engine';
+import { calculateWPM, calculateAccuracy } from '@/lib/typing-engine';
+import { LetterProgressPanel } from './LetterProgressPanel';
+import { KeybrResults } from './KeybrResults';
+import { Button } from '@/components/ui/button';
+
+type TestStatus = 'idle' | 'running' | 'finished';
+
+export function KeybrLessonMode() {
+  const [status, setStatus] = useState<TestStatus>('idle');
+  const [lesson, setLesson] = useState<KeybrLesson | null>(null);
+  const [typedText, setTypedText] = useState('');
+  const [keystrokes, setKeystrokes] = useState<Keystroke[]>([]);
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [currentWpm, setCurrentWpm] = useState(0);
+  const [currentAccuracy, setCurrentAccuracy] = useState(100);
+  const [isFocused, setIsFocused] = useState(false);
+  const [results, setResults] = useState<{
+    wpm: number;
+    accuracy: number;
+    newlyUnlocked: string[];
+    perCharMetrics: Map<string, any>;
+  } | null>(null);
+  
+  const inputRef = useRef<HTMLInputElement>(null);
+  const startTimeRef = useRef<number>(0);
+
+  // Generate lesson on mount
+  useEffect(() => {
+    generateNewLesson();
+  }, []);
+
+  const generateNewLesson = useCallback(() => {
+    const newLesson = generateKeybrLesson(40);
+    setLesson(newLesson);
+    setTypedText('');
+    setKeystrokes([]);
+    setStatus('idle');
+    setCurrentWpm(0);
+    setCurrentAccuracy(100);
+    setResults(null);
+  }, []);
+
+  // Calculate live stats
+  useEffect(() => {
+    if (!lesson || !startTime || typedText.length === 0) return;
+    
+    const elapsedTime = (Date.now() - startTime) / 1000;
+    let correctChars = 0;
+    
+    for (let i = 0; i < typedText.length; i++) {
+      if (typedText[i] === lesson.text[i]) {
+        correctChars++;
+      }
+    }
+    
+    setCurrentWpm(calculateWPM(correctChars, elapsedTime));
+    setCurrentAccuracy(calculateAccuracy(correctChars, typedText.length));
+  }, [typedText, lesson, startTime]);
+
+  // Check for completion
+  useEffect(() => {
+    if (status === 'running' && lesson && typedText.length >= lesson.text.length) {
+      finishTest();
+    }
+  }, [typedText, lesson, status]);
+
+  const finishTest = useCallback(() => {
+    if (!lesson) return;
+    
+    setStatus('finished');
+    
+    const elapsedTime = (Date.now() - (startTime || Date.now())) / 1000;
+    let correctChars = 0;
+    
+    for (let i = 0; i < typedText.length; i++) {
+      if (typedText[i] === lesson.text[i]) {
+        correctChars++;
+      }
+    }
+    
+    const wpm = calculateWPM(correctChars, elapsedTime);
+    const accuracy = calculateAccuracy(correctChars, typedText.length);
+    
+    // Calculate per-character metrics
+    const perCharMetrics = calculatePerCharMetrics(keystrokes);
+    
+    // Update progress and check for unlocks
+    const { newlyUnlocked } = updateCharacterProgress(perCharMetrics);
+    
+    setResults({
+      wpm,
+      accuracy,
+      newlyUnlocked,
+      perCharMetrics
+    });
+  }, [lesson, typedText, startTime, keystrokes]);
+
+  const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (status !== 'running' || !lesson) return;
+    
+    const value = e.target.value;
+    
+    if (value.length <= lesson.text.length) {
+      // Record keystroke
+      const newChar = value[value.length - 1];
+      const expectedChar = lesson.text[value.length - 1];
+      
+      if (newChar) {
+        setKeystrokes(prev => [...prev, {
+          char: newChar,
+          timestamp: Date.now() - startTimeRef.current,
+          isCorrect: newChar === expectedChar,
+          expected: expectedChar
+        }]);
+      }
+      
+      setTypedText(value);
+    }
+  }, [status, lesson]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (status === 'idle' && e.key === 'Enter') {
+      e.preventDefault();
+      setStatus('running');
+      setStartTime(Date.now());
+      startTimeRef.current = Date.now();
+      inputRef.current?.focus();
+      return;
+    }
+    
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      generateNewLesson();
+      return;
+    }
+  }, [status, generateNewLesson]);
+
+  // Global keyboard listener
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (status === 'idle' && e.key === 'Enter') {
+        e.preventDefault();
+        setStatus('running');
+        setStartTime(Date.now());
+        startTimeRef.current = Date.now();
+        inputRef.current?.focus();
+      }
+      
+      if (e.key === 'Tab' && status !== 'finished') {
+        e.preventDefault();
+        generateNewLesson();
+      }
+    };
+    
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [status, generateNewLesson]);
+
+  // Word groups for display
+  const wordGroups = useMemo(() => {
+    if (!lesson) return [];
+    
+    const words: { chars: { char: string; state: string }[]; hasSpace: boolean }[] = [];
+    let currentWord: { char: string; state: string }[] = [];
+    
+    for (let i = 0; i < lesson.text.length; i++) {
+      const char = lesson.text[i];
+      const typedChar = typedText[i];
+      
+      let state: string;
+      if (i < typedText.length) {
+        state = typedChar === char ? 'correct' : 'incorrect';
+      } else if (i === typedText.length) {
+        state = 'current';
+      } else {
+        state = 'upcoming';
+      }
+      
+      if (char === ' ') {
+        if (currentWord.length > 0) {
+          words.push({ chars: currentWord, hasSpace: true });
+          currentWord = [];
+        }
+      } else {
+        currentWord.push({ char, state });
+      }
+    }
+    
+    if (currentWord.length > 0) {
+      words.push({ chars: currentWord, hasSpace: false });
+    }
+    
+    return words;
+  }, [lesson, typedText]);
+
+  if (results) {
+    return (
+      <KeybrResults
+        wpm={results.wpm}
+        accuracy={results.accuracy}
+        newlyUnlocked={results.newlyUnlocked}
+        perCharMetrics={results.perCharMetrics}
+        onRestart={generateNewLesson}
+      />
+    );
+  }
+
+  return (
+    <div className="w-full max-w-4xl mx-auto" tabIndex={0} onKeyDown={handleKeyDown}>
+      {/* Header */}
+      <div className="flex items-center justify-center gap-3 mb-6">
+        <Sparkles className="w-6 h-6 text-primary" />
+        <h2 className="text-2xl font-bold">Adaptive Practice</h2>
+      </div>
+      
+      {/* Focus letters indicator */}
+      {lesson && (
+        <div className="flex items-center justify-center gap-2 mb-6">
+          <Zap className="w-4 h-4 text-warning" />
+          <span className="text-sm text-muted-foreground">Focus letters:</span>
+          <div className="flex gap-1">
+            {lesson.focusLetters.map(letter => (
+              <span 
+                key={letter} 
+                className="px-2 py-0.5 bg-warning/20 text-warning rounded font-mono font-bold uppercase"
+              >
+                {letter}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Live Stats */}
+      <AnimatePresence>
+        {status === 'running' && (
+          <motion.div
+            className="flex items-center justify-center gap-8 mb-6"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+          >
+            <div className="flex flex-col items-center">
+              <span className="text-3xl font-mono font-bold text-foreground">{currentWpm}</span>
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">wpm</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className={cn(
+                "text-3xl font-mono font-bold",
+                currentAccuracy >= 95 ? "text-success" : 
+                currentAccuracy >= 90 ? "text-warning" : "text-destructive"
+              )}>
+                {currentAccuracy}%
+              </span>
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">accuracy</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Typing Area */}
+      <div
+        className={cn(
+          "relative bg-card border rounded-2xl p-6 md:p-10 cursor-text min-h-[200px] transition-all duration-300",
+          status === 'running' ? "border-primary/50 shadow-lg shadow-primary/10" : "border-border",
+          isFocused && status === 'idle' && "border-primary/30"
+        )}
+        onClick={() => inputRef.current?.focus()}
+      >
+        {/* Hidden Input */}
+        <input
+          ref={inputRef}
+          type="text"
+          value={typedText}
+          onChange={handleInput}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          className="absolute opacity-0 pointer-events-none"
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          disabled={status === 'finished' || status === 'idle'}
+        />
+        
+        {/* Text Display */}
+        <div className={cn(
+          "font-mono text-xl md:text-2xl leading-relaxed select-none max-h-[280px] overflow-hidden transition-opacity duration-300",
+          status === 'idle' && "opacity-50"
+        )}>
+          {wordGroups.slice(0, 80).map((word, wordIndex) => (
+            <span key={wordIndex} className="inline-block whitespace-nowrap">
+              {word.chars.map((charState, charIndex) => (
+                <span
+                  key={charIndex}
+                  className={cn(
+                    'relative transition-colors duration-75',
+                    charState.state === 'correct' && 'text-typing-correct',
+                    charState.state === 'incorrect' && 'text-typing-error bg-destructive/20 rounded-sm',
+                    charState.state === 'current' && 'text-primary',
+                    charState.state === 'upcoming' && 'text-muted-foreground/70',
+                    // Highlight focus letters
+                    lesson?.focusLetters.includes(charState.char.toLowerCase()) && 
+                    charState.state === 'upcoming' && 'text-warning/80'
+                  )}
+                >
+                  {charState.state === 'current' && status === 'running' && (
+                    <motion.span 
+                      className="absolute left-0 top-1 w-0.5 h-[calc(100%-8px)] bg-primary rounded-full"
+                      animate={{ opacity: [1, 0, 1] }}
+                      transition={{ duration: 0.8, repeat: Infinity }}
+                    />
+                  )}
+                  {charState.char}
+                </span>
+              ))}
+              {word.hasSpace && <span className="text-muted-foreground/70">{'\u00A0'}</span>}
+            </span>
+          ))}
+        </div>
+        
+        {/* Start prompt */}
+        {status === 'idle' && (
+          <motion.div
+            className="absolute inset-0 flex flex-col items-center justify-center bg-card rounded-2xl z-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+          >
+            <motion.div
+              className="flex flex-col items-center gap-4"
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+            >
+              <motion.div
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary/10 border border-primary/30 rounded-xl"
+                whileHover={{ scale: 1.02 }}
+                animate={{ 
+                  boxShadow: ['0 0 0px hsl(var(--primary) / 0)', '0 0 20px hsl(var(--primary) / 0.3)', '0 0 0px hsl(var(--primary) / 0)']
+                }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                <span className="text-primary font-mono font-bold text-lg">↵ Enter</span>
+              </motion.div>
+              <p className="text-muted-foreground text-sm font-medium">
+                press enter to start adaptive practice
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </div>
+      
+      {/* Controls */}
+      <motion.div 
+        className="flex items-center justify-center gap-6 mt-6"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+      >
+        <button
+          onClick={generateNewLesson}
+          className="flex items-center gap-2 px-4 py-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted group"
+        >
+          <RotateCcw className="w-4 h-4 group-hover:rotate-[-45deg] transition-transform" />
+          <span className="text-sm">new lesson</span>
+          <span className="text-xs text-muted-foreground/60 ml-1">tab</span>
+        </button>
+      </motion.div>
+      
+      {/* Letter Progress */}
+      <div className="mt-8">
+        <LetterProgressPanel />
+      </div>
+    </div>
+  );
+}
