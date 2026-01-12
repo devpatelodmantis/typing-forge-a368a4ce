@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type TestMode = 'time' | 'words' | 'quote' | 'zen' | 'keybr';
+export type TestMode = 'time' | 'words' | 'quote' | 'zen' | 'keybr' | 'code';
 export type TestDuration = 15 | 30 | 60 | 120 | 180;
 export type TestStatus = 'idle' | 'running' | 'finished';
 

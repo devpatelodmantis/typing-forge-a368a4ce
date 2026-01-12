@@ -1,12 +1,13 @@
 import { useTestStore, type TestMode, type TestDuration } from '@/stores/test-store';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Clock, Type, Quote, Sparkles, Hash, LetterText, Brain } from 'lucide-react';
+import { Clock, Type, Quote, Sparkles, Hash, LetterText, Brain, Code } from 'lucide-react';
 
 const modes: { value: TestMode; label: string; icon: React.ReactNode }[] = [
   { value: 'time', label: 'time', icon: <Clock className="w-4 h-4" /> },
   { value: 'words', label: 'words', icon: <Type className="w-4 h-4" /> },
   { value: 'quote', label: 'quote', icon: <Quote className="w-4 h-4" /> },
+  { value: 'code', label: 'code', icon: <Code className="w-4 h-4" /> },
   { value: 'zen', label: 'zen', icon: <Sparkles className="w-4 h-4" /> },
   { value: 'keybr', label: 'learn', icon: <Brain className="w-4 h-4" /> },
 ];

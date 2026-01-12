@@ -1,22 +1,37 @@
-import { Keyboard, BarChart3, Settings, Trophy, User } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Keyboard, BarChart3, Trophy, User, LogOut, Swords } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export function Header() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   
   const navItems = [
     { href: '/', label: 'Type', icon: Keyboard },
+    { href: '/race', label: 'Race', icon: Swords },
     { href: '/stats', label: 'Stats', icon: BarChart3 },
     { href: '/leaderboard', label: 'Leaderboard', icon: Trophy },
   ];
+  
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/');
+  };
   
   return (
     <header className="sticky top-0 z-50 glass border-b">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
             <motion.div
               className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 text-primary"
@@ -30,7 +45,6 @@ export function Header() {
             </span>
           </Link>
           
-          {/* Navigation */}
           <nav className="hidden md:flex items-center gap-1">
             {navItems.map((item) => {
               const isActive = location.pathname === item.href;
@@ -54,14 +68,29 @@ export function Header() {
             })}
           </nav>
           
-          {/* Right Actions */}
           <div className="flex items-center gap-2">
-            <button className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-              <Settings className="w-5 h-5" />
-            </button>
-            <button className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-              <User className="w-5 h-5" />
-            </button>
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="rounded-full">
+                    <User className="w-5 h-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem className="text-muted-foreground">
+                    {user.email}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleSignOut}>
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => navigate('/auth')}>
+                Sign in
+              </Button>
+            )}
           </div>
         </div>
       </div>
