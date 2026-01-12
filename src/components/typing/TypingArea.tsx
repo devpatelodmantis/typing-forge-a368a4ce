@@ -222,16 +222,23 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     inputRef.current?.focus();
   }, [resetTest, generateText]);
   
-  // Get character states for rendering - grouped by words
+  // Define extended type for space handling
+  type ExtendedCharState = ReturnType<typeof getCharacterStates>[0] & { isSpace?: boolean };
+  
+  // Get character states for rendering - grouped by words with space handling
   const wordGroups = useMemo(() => {
     const states = getCharacterStates(targetText, typedText, typedText.length);
-    const words: { chars: typeof states; hasSpace: boolean }[] = [];
-    let currentWord: typeof states = [];
+    const words: { chars: ExtendedCharState[]; hasSpace: boolean; spaceState?: ExtendedCharState }[] = [];
+    let currentWord: ExtendedCharState[] = [];
     
-    states.forEach((charState, index) => {
+    states.forEach((charState) => {
       if (charState.char === ' ') {
-        if (currentWord.length > 0) {
-          words.push({ chars: currentWord, hasSpace: true });
+        if (currentWord.length > 0 || words.length === 0) {
+          words.push({ 
+            chars: currentWord, 
+            hasSpace: true,
+            spaceState: { ...charState, isSpace: true }
+          });
           currentWord = [];
         }
       } else {
@@ -331,11 +338,11 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
                 <span
                   key={charIndex}
                   className={cn(
-                    'relative transition-colors duration-75',
-                    charState.state === 'correct' && 'text-typing-correct',
-                    charState.state === 'incorrect' && 'text-typing-error bg-destructive/20 rounded-sm',
-                    charState.state === 'current' && 'text-primary',
-                    charState.state === 'upcoming' && 'text-muted-foreground/70'
+                    'relative inline-block',
+                    charState.state === 'correct' && 'char-correct',
+                    charState.state === 'incorrect' && 'char-error animate-shake',
+                    charState.state === 'current' && 'char-current',
+                    charState.state === 'upcoming' && 'char-upcoming'
                   )}
                 >
                   {charState.state === 'current' && status === 'running' && (
@@ -348,7 +355,19 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
                   {charState.char}
                 </span>
               ))}
-              {word.hasSpace && <span className="text-muted-foreground/70">{'\u00A0'}</span>}
+              {word.hasSpace && word.spaceState && (
+                <span
+                  className={cn(
+                    'inline-block min-w-[0.6em]',
+                    word.spaceState.state === 'correct' && 'char-correct',
+                    word.spaceState.state === 'incorrect' && 'char-error animate-shake',
+                    word.spaceState.state === 'current' && 'char-current',
+                    word.spaceState.state === 'upcoming' && 'char-upcoming-space'
+                  )}
+                >
+                  {word.spaceState.state === 'upcoming' ? '·' : '\u00A0'}
+                </span>
+              )}
             </span>
           ))}
         </div>
