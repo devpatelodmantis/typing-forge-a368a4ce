@@ -34,7 +34,9 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
   
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const textDisplayRef = useRef<HTMLDivElement>(null);
   const [timeRemaining, setTimeRemaining] = useState<number>(settings.duration);
+  const [scrollOffset, setScrollOffset] = useState(0);
   const [currentWpm, setCurrentWpm] = useState(0);
   const [currentAccuracy, setCurrentAccuracy] = useState(100);
   const [isFocused, setIsFocused] = useState(false);
@@ -219,6 +221,7 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
   const handleRestart = useCallback(() => {
     resetTest();
     generateText();
+    setScrollOffset(0);
     inputRef.current?.focus();
   }, [resetTest, generateText]);
   
@@ -253,6 +256,27 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     
     return words;
   }, [targetText, typedText]);
+  
+  // Auto-scroll to keep current character visible
+  useEffect(() => {
+    if (status !== 'running' || !textDisplayRef.current) return;
+    
+    const currentCharElement = textDisplayRef.current.querySelector('.char-current');
+    if (currentCharElement) {
+      const container = textDisplayRef.current;
+      const charRect = currentCharElement.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      
+      // Calculate line height (approximately)
+      const lineHeight = 48; // Matches the text size
+      
+      // If current char is below visible area, scroll down
+      if (charRect.top > containerRect.top + lineHeight * 2) {
+        const newOffset = Math.floor((charRect.top - containerRect.top) / lineHeight) - 1;
+        setScrollOffset(prev => Math.max(prev, newOffset));
+      }
+    }
+  }, [typedText, status]);
   
   // Focus input on mount and status change
   useEffect(() => {
@@ -328,11 +352,18 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
         />
         
         {/* Text Display */}
-        <div className={cn(
-          "font-mono text-xl md:text-2xl leading-relaxed select-none max-h-[280px] overflow-hidden transition-opacity duration-300",
-          status === 'idle' && "opacity-50"
-        )}>
-          {wordGroups.slice(0, 80).map((word, wordIndex) => (
+        <div 
+          ref={textDisplayRef}
+          className={cn(
+            "font-mono text-xl md:text-2xl leading-[2.5] select-none max-h-[200px] overflow-hidden transition-all duration-300",
+            status === 'idle' && "opacity-50"
+          )}
+          style={{
+            transform: `translateY(-${scrollOffset * 48}px)`,
+            transition: 'transform 0.3s ease-out'
+          }}
+        >
+          {wordGroups.map((word, wordIndex) => (
             <span key={wordIndex} className="inline-block whitespace-nowrap">
               {word.chars.map((charState, charIndex) => (
                 <span
