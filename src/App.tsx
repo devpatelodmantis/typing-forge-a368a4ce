@@ -8,6 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Stats from "./pages/Stats";
 import Leaderboard from "./pages/Leaderboard";
+import Profile from "./pages/Profile";
 import Auth from "./pages/Auth";
 import Race from "./pages/Race";
 import NotFound from "./pages/NotFound";
@@ -31,6 +32,7 @@ const App = () => {
               <Route path="/" element={<Index />} />
               <Route path="/stats" element={<Stats />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/profile" element={<Profile />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/race" element={<Race />} />
               <Route path="/race/:roomCode" element={<Race />} />

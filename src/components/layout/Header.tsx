@@ -80,6 +80,10 @@ export function Header() {
                   <DropdownMenuItem className="text-muted-foreground">
                     {user.email}
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/profile')}>
+                    <User className="w-4 h-4 mr-2" />
+                    Profile
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleSignOut}>
                     <LogOut className="w-4 h-4 mr-2" />
                     Sign out
