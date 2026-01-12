@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { forwardRef } from 'react';
 
 interface StatCardProps {
   label: string;
@@ -24,22 +25,40 @@ const sizeStyles = {
   lg: 'text-4xl md:text-5xl',
 };
 
-export function StatCard({
+export const StatCard = forwardRef<HTMLDivElement, StatCardProps>(({
   label,
   value,
   suffix,
   variant = 'default',
   size = 'md',
   animate = true,
-}: StatCardProps) {
-  const Container = animate ? motion.div : 'div';
+}, ref) => {
+  if (animate) {
+    return (
+      <motion.div
+        ref={ref}
+        className="stat-card flex flex-col items-center justify-center gap-2 text-center"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <span className="stat-label">{label}</span>
+        <div className="flex items-baseline gap-1">
+          <span className={cn('stat-value', variantStyles[variant], sizeStyles[size])}>
+            {value}
+          </span>
+          {suffix && (
+            <span className="text-sm text-muted-foreground">{suffix}</span>
+          )}
+        </div>
+      </motion.div>
+    );
+  }
   
   return (
-    <Container
+    <div
+      ref={ref}
       className="stat-card flex flex-col items-center justify-center gap-2 text-center"
-      initial={animate ? { opacity: 0, y: 20 } : undefined}
-      animate={animate ? { opacity: 1, y: 0 } : undefined}
-      transition={{ duration: 0.3 }}
     >
       <span className="stat-label">{label}</span>
       <div className="flex items-baseline gap-1">
@@ -50,6 +69,8 @@ export function StatCard({
           <span className="text-sm text-muted-foreground">{suffix}</span>
         )}
       </div>
-    </Container>
+    </div>
   );
-}
+});
+
+StatCard.displayName = 'StatCard';

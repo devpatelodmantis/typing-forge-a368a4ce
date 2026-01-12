@@ -33,11 +33,14 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
   } = useTestStore();
   
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [timeRemaining, setTimeRemaining] = useState<number>(settings.duration);
   const [currentWpm, setCurrentWpm] = useState(0);
   const [currentAccuracy, setCurrentAccuracy] = useState(100);
+  const [isFocused, setIsFocused] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const wpmIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const statsRef = useRef({ wpm: 0, accuracy: 100, correctChars: 0, incorrectChars: 0, totalChars: 0, elapsedTime: 0 });
   
   // Generate text based on mode
   const generateText = useCallback(() => {
@@ -52,7 +55,6 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
       case 'time':
       case 'zen':
       default:
-        // Generate more words for timed tests
         text = generateRandomWords(200, settings.punctuation, settings.numbers);
         break;
     }
@@ -82,7 +84,7 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     const wpm = calculateWPM(correctChars, elapsedTime);
     const accuracy = calculateAccuracy(correctChars, typedText.length);
     
-    return {
+    const result = {
       wpm,
       accuracy,
       correctChars,
@@ -90,6 +92,9 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
       totalChars: typedText.length,
       elapsedTime,
     };
+    
+    statsRef.current = result;
+    return result;
   }, [typedText, targetText, startTime]);
   
   // Update live stats
@@ -111,9 +116,9 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
         });
       }, 1000);
       
-      // Sample WPM every second
+      // Sample WPM every second using ref to avoid stale closure
       wpmIntervalRef.current = setInterval(() => {
-        addWpmSample(stats.wpm);
+        addWpmSample(statsRef.current.wpm);
       }, 1000);
     }
     
@@ -121,7 +126,7 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (wpmIntervalRef.current) clearInterval(wpmIntervalRef.current);
     };
-  }, [status, settings.mode, finishTest, addWpmSample, stats.wpm]);
+  }, [status, settings.mode, finishTest, addWpmSample]);
   
   // Check for completion in words/quote mode
   useEffect(() => {
@@ -151,20 +156,59 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     }
   }, [status, stats, wpmHistory, onTestComplete]);
   
-  // Handle input
+  // Handle keyboard input when test is running
   const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    if (status !== 'running') return;
     
-    // Start test on first keystroke
-    if (status === 'idle' && value.length > 0) {
-      startTest();
-    }
+    const value = e.target.value;
     
     // Don't allow typing beyond target
     if (value.length <= targetText.length) {
       updateTypedText(value);
     }
-  }, [status, startTest, updateTypedText, targetText.length]);
+  }, [status, updateTypedText, targetText.length]);
+  
+  // Handle key down events
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Start test on Enter key when idle
+    if (status === 'idle' && e.key === 'Enter') {
+      e.preventDefault();
+      startTest();
+      inputRef.current?.focus();
+      return;
+    }
+    
+    // Restart on Tab key
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      resetTest();
+      generateText();
+      inputRef.current?.focus();
+      return;
+    }
+  }, [status, startTest, resetTest, generateText]);
+  
+  // Global keyboard listener for Enter to start
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (status === 'idle' && e.key === 'Enter') {
+        e.preventDefault();
+        startTest();
+        inputRef.current?.focus();
+      }
+      
+      // Tab to restart
+      if (e.key === 'Tab' && status !== 'finished') {
+        e.preventDefault();
+        resetTest();
+        generateText();
+        inputRef.current?.focus();
+      }
+    };
+    
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [status, startTest, resetTest, generateText]);
   
   // Focus input on click
   const handleClick = useCallback(() => {
@@ -183,13 +227,20 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     return getCharacterStates(targetText, typedText, typedText.length);
   }, [targetText, typedText]);
   
-  // Focus input on mount
+  // Focus input on mount and status change
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (status === 'running') {
+      inputRef.current?.focus();
+    }
+  }, [status]);
   
   return (
-    <div className="w-full max-w-4xl mx-auto">
+    <div 
+      className="w-full max-w-4xl mx-auto" 
+      ref={containerRef}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
       {/* Live Stats Bar */}
       <AnimatePresence>
         {status === 'running' && settings.mode !== 'zen' && (
@@ -200,24 +251,24 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
             exit={{ opacity: 0, y: -20 }}
           >
             {settings.mode === 'time' && (
-              <div className="text-4xl font-mono font-bold text-primary">
+              <div className="text-5xl font-mono font-bold text-primary">
                 {timeRemaining}
               </div>
             )}
-            <div className="flex items-center gap-6 text-muted-foreground">
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-mono font-semibold text-foreground">{currentWpm}</span>
-                <span className="text-sm">wpm</span>
+            <div className="flex items-center gap-8 text-muted-foreground">
+              <div className="flex flex-col items-center">
+                <span className="text-3xl font-mono font-bold text-foreground">{currentWpm}</span>
+                <span className="text-xs uppercase tracking-wider">wpm</span>
               </div>
-              <div className="flex items-baseline gap-1">
+              <div className="flex flex-col items-center">
                 <span className={cn(
-                  "text-2xl font-mono font-semibold",
+                  "text-3xl font-mono font-bold",
                   currentAccuracy >= 95 ? "text-success" : 
                   currentAccuracy >= 90 ? "text-warning" : "text-destructive"
                 )}>
-                  {currentAccuracy}
+                  {currentAccuracy}%
                 </span>
-                <span className="text-sm">%</span>
+                <span className="text-xs uppercase tracking-wider">accuracy</span>
               </div>
             </div>
           </motion.div>
@@ -226,7 +277,11 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
       
       {/* Typing Area */}
       <div
-        className="relative bg-card border border-border rounded-2xl p-6 md:p-10 cursor-text min-h-[180px] shadow-lg"
+        className={cn(
+          "relative bg-card border rounded-2xl p-6 md:p-10 cursor-text min-h-[200px] transition-all duration-300",
+          status === 'running' ? "border-primary/50 shadow-lg shadow-primary/10" : "border-border",
+          isFocused && status === 'idle' && "border-primary/30"
+        )}
         onClick={handleClick}
       >
         {/* Hidden Input */}
@@ -235,17 +290,22 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
           type="text"
           value={typedText}
           onChange={handleInput}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           className="absolute opacity-0 pointer-events-none"
           autoComplete="off"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          disabled={status === 'finished'}
+          disabled={status === 'finished' || status === 'idle'}
         />
         
         {/* Text Display */}
-        <div className="font-mono text-xl md:text-2xl leading-loose select-none break-words max-h-[300px] overflow-hidden">
-          {characterStates.slice(0, 300).map((charState, index) => (
+        <div className={cn(
+          "font-mono text-xl md:text-2xl leading-loose select-none break-words max-h-[280px] overflow-hidden transition-opacity duration-300",
+          status === 'idle' && "opacity-50"
+        )}>
+          {characterStates.slice(0, 350).map((charState, index) => (
             <span
               key={index}
               className={cn(
@@ -253,45 +313,68 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
                 charState.state === 'correct' && 'text-typing-correct',
                 charState.state === 'incorrect' && 'text-typing-error bg-destructive/20 rounded-sm px-0.5',
                 charState.state === 'current' && 'text-primary',
-                charState.state === 'upcoming' && 'text-muted-foreground'
+                charState.state === 'upcoming' && 'text-muted-foreground/70'
               )}
             >
-              {charState.state === 'current' && (
-                <span className="absolute left-0 top-1 w-0.5 h-[calc(100%-8px)] bg-primary caret-blink rounded-full" />
+              {charState.state === 'current' && status === 'running' && (
+                <motion.span 
+                  className="absolute left-0 top-1 w-0.5 h-[calc(100%-8px)] bg-primary rounded-full"
+                  animate={{ opacity: [1, 0, 1] }}
+                  transition={{ duration: 0.8, repeat: Infinity }}
+                />
               )}
               {charState.char === ' ' ? '\u00A0' : charState.char}
             </span>
           ))}
         </div>
         
-        {/* Focus hint */}
+        {/* Start prompt overlay */}
         {status === 'idle' && (
           <motion.div
-            className="absolute inset-0 flex items-center justify-center bg-card/90 backdrop-blur-sm rounded-2xl"
+            className="absolute inset-0 flex flex-col items-center justify-center bg-card rounded-2xl z-10"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
           >
-            <p className="text-muted-foreground text-lg font-medium">
-              Click here or start typing to begin
-            </p>
+            <motion.div
+              className="flex flex-col items-center gap-4"
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+            >
+              <motion.div
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary/10 border border-primary/30 rounded-xl"
+                whileHover={{ scale: 1.02 }}
+                animate={{ 
+                  boxShadow: ['0 0 0px hsl(var(--primary) / 0)', '0 0 20px hsl(var(--primary) / 0.3)', '0 0 0px hsl(var(--primary) / 0)']
+                }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                <span className="text-primary font-mono font-bold text-lg">↵ Enter</span>
+              </motion.div>
+              <p className="text-muted-foreground text-sm font-medium">
+                press enter to start
+              </p>
+            </motion.div>
           </motion.div>
         )}
       </div>
       
-      {/* Restart Button */}
+      {/* Bottom Controls */}
       <motion.div 
-        className="flex justify-center mt-6"
+        className="flex items-center justify-center gap-6 mt-6"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
       >
         <button
           onClick={handleRestart}
-          className="flex items-center gap-2 px-4 py-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted"
+          className="flex items-center gap-2 px-4 py-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted group"
         >
-          <RotateCcw className="w-4 h-4" />
-          <span className="text-sm">restart test</span>
+          <RotateCcw className="w-4 h-4 group-hover:rotate-[-45deg] transition-transform" />
+          <span className="text-sm">restart</span>
+          <span className="text-xs text-muted-foreground/60 ml-1">tab</span>
         </button>
       </motion.div>
     </div>
