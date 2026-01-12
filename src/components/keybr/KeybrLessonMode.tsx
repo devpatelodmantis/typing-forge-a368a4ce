@@ -25,6 +25,8 @@ export function KeybrLessonMode() {
   const [currentWpm, setCurrentWpm] = useState(0);
   const [currentAccuracy, setCurrentAccuracy] = useState(100);
   const [isFocused, setIsFocused] = useState(false);
+  const [showErrorFlash, setShowErrorFlash] = useState(false);
+  const [scrollOffset, setScrollOffset] = useState(0);
   const [results, setResults] = useState<{
     wpm: number;
     accuracy: number;
@@ -33,6 +35,7 @@ export function KeybrLessonMode() {
   } | null>(null);
   
   const inputRef = useRef<HTMLInputElement>(null);
+  const textDisplayRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
 
   // Generate lesson on mount
@@ -49,6 +52,7 @@ export function KeybrLessonMode() {
     setCurrentWpm(0);
     setCurrentAccuracy(100);
     setResults(null);
+    setScrollOffset(0);
   }, []);
 
   // Calculate live stats
@@ -112,15 +116,23 @@ export function KeybrLessonMode() {
     const value = e.target.value;
     
     if (value.length <= lesson.text.length) {
-      // Record keystroke
+      // Get the new character typed
       const newChar = value[value.length - 1];
       const expectedChar = lesson.text[value.length - 1];
+      
+      // Learn mode requires 100% accuracy - only accept correct characters
+      if (newChar && newChar !== expectedChar) {
+        // Wrong character - show error flash but don't accept
+        setShowErrorFlash(true);
+        setTimeout(() => setShowErrorFlash(false), 150);
+        return;
+      }
       
       if (newChar) {
         setKeystrokes(prev => [...prev, {
           char: newChar,
           timestamp: Date.now() - startTimeRef.current,
-          isCorrect: newChar === expectedChar,
+          isCorrect: true, // Always true in learn mode
           expected: expectedChar
         }]);
       }
@@ -167,12 +179,14 @@ export function KeybrLessonMode() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [status, generateNewLesson]);
 
-  // Word groups for display
+  // Word groups for display with space state
+  type CharState = { char: string; state: string; isSpace?: boolean };
+  
   const wordGroups = useMemo(() => {
     if (!lesson) return [];
     
-    const words: { chars: { char: string; state: string }[]; hasSpace: boolean }[] = [];
-    let currentWord: { char: string; state: string }[] = [];
+    const words: { chars: CharState[]; hasSpace: boolean; spaceState?: CharState }[] = [];
+    let currentWord: CharState[] = [];
     
     for (let i = 0; i < lesson.text.length; i++) {
       const char = lesson.text[i];
@@ -188,8 +202,12 @@ export function KeybrLessonMode() {
       }
       
       if (char === ' ') {
-        if (currentWord.length > 0) {
-          words.push({ chars: currentWord, hasSpace: true });
+        if (currentWord.length > 0 || words.length === 0) {
+          words.push({ 
+            chars: currentWord, 
+            hasSpace: true,
+            spaceState: { char: ' ', state, isSpace: true }
+          });
           currentWord = [];
         }
       } else {
@@ -203,6 +221,25 @@ export function KeybrLessonMode() {
     
     return words;
   }, [lesson, typedText]);
+  
+  // Auto-scroll to keep current character visible
+  useEffect(() => {
+    if (status !== 'running' || !textDisplayRef.current) return;
+    
+    const currentCharElement = textDisplayRef.current.querySelector('.char-current');
+    if (currentCharElement) {
+      const container = textDisplayRef.current;
+      const charRect = currentCharElement.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      
+      const lineHeight = 48;
+      
+      if (charRect.top > containerRect.top + lineHeight * 2) {
+        const newOffset = Math.floor((charRect.top - containerRect.top) / lineHeight) - 1;
+        setScrollOffset(prev => Math.max(prev, newOffset));
+      }
+    }
+  }, [typedText, status]);
 
   if (results) {
     return (
@@ -274,7 +311,8 @@ export function KeybrLessonMode() {
         className={cn(
           "relative bg-card border rounded-2xl p-6 md:p-10 cursor-text min-h-[200px] transition-all duration-300",
           status === 'running' ? "border-primary/50 shadow-lg shadow-primary/10" : "border-border",
-          isFocused && status === 'idle' && "border-primary/30"
+          isFocused && status === 'idle' && "border-primary/30",
+          showErrorFlash && "border-destructive shadow-destructive/20"
         )}
         onClick={() => inputRef.current?.focus()}
       >
@@ -295,21 +333,28 @@ export function KeybrLessonMode() {
         />
         
         {/* Text Display */}
-        <div className={cn(
-          "font-mono text-xl md:text-2xl leading-relaxed select-none max-h-[280px] overflow-hidden transition-opacity duration-300",
-          status === 'idle' && "opacity-50"
-        )}>
-          {wordGroups.slice(0, 80).map((word, wordIndex) => (
+        <div 
+          ref={textDisplayRef}
+          className={cn(
+            "font-mono text-xl md:text-2xl leading-[2.5] select-none max-h-[200px] overflow-hidden transition-all duration-300",
+            status === 'idle' && "opacity-50"
+          )}
+          style={{
+            transform: `translateY(-${scrollOffset * 48}px)`,
+            transition: 'transform 0.3s ease-out'
+          }}
+        >
+          {wordGroups.map((word, wordIndex) => (
             <span key={wordIndex} className="inline-block whitespace-nowrap">
               {word.chars.map((charState, charIndex) => (
                 <span
                   key={charIndex}
                   className={cn(
-                    'relative transition-colors duration-75',
-                    charState.state === 'correct' && 'text-typing-correct',
-                    charState.state === 'incorrect' && 'text-typing-error bg-destructive/20 rounded-sm',
-                    charState.state === 'current' && 'text-primary',
-                    charState.state === 'upcoming' && 'text-muted-foreground/70',
+                    'relative inline-block',
+                    charState.state === 'correct' && 'char-correct',
+                    charState.state === 'incorrect' && 'char-error animate-shake',
+                    charState.state === 'current' && 'char-current',
+                    charState.state === 'upcoming' && 'char-upcoming',
                     // Highlight focus letters
                     lesson?.focusLetters.includes(charState.char.toLowerCase()) && 
                     charState.state === 'upcoming' && 'text-warning/80'
@@ -325,7 +370,19 @@ export function KeybrLessonMode() {
                   {charState.char}
                 </span>
               ))}
-              {word.hasSpace && <span className="text-muted-foreground/70">{'\u00A0'}</span>}
+              {word.hasSpace && word.spaceState && (
+                <span
+                  className={cn(
+                    'inline-block min-w-[0.6em]',
+                    word.spaceState.state === 'correct' && 'char-correct',
+                    word.spaceState.state === 'incorrect' && 'char-error animate-shake',
+                    word.spaceState.state === 'current' && 'char-current',
+                    word.spaceState.state === 'upcoming' && 'char-upcoming-space'
+                  )}
+                >
+                  {word.spaceState.state === 'upcoming' ? '·' : '\u00A0'}
+                </span>
+              )}
             </span>
           ))}
         </div>
