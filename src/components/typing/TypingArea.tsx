@@ -158,9 +158,14 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     }
   }, [status, stats, wpmHistory, onTestComplete]);
   
-  // Handle keyboard input when test is running
+  // Handle keyboard input - start test on first keystroke
   const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (status !== 'running') return;
+    // Start test on first keystroke if idle
+    if (status === 'idle') {
+      startTest();
+    }
+    
+    if (status === 'finished') return;
     
     const value = e.target.value;
     
@@ -168,7 +173,7 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     if (value.length <= targetText.length) {
       updateTypedText(value);
     }
-  }, [status, updateTypedText, targetText.length]);
+  }, [status, startTest, updateTypedText, targetText.length]);
   
   // Handle key down events
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -335,7 +340,7 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
         )}
         onClick={handleClick}
       >
-        {/* Hidden Input */}
+        {/* Hidden Input - NOT disabled when idle so user can start typing immediately */}
         <input
           ref={inputRef}
           type="text"
@@ -348,7 +353,7 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          disabled={status === 'finished' || status === 'idle'}
+          disabled={status === 'finished'}
         />
         
         {/* Text Display */}
@@ -406,11 +411,12 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
         {/* Start prompt overlay */}
         {status === 'idle' && (
           <motion.div
-            className="absolute inset-0 flex flex-col items-center justify-center bg-card rounded-2xl z-10"
+            className="absolute inset-0 flex flex-col items-center justify-center bg-card/95 rounded-2xl z-10 cursor-text"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2 }}
+            onClick={handleClick}
           >
             <motion.div
               className="flex flex-col items-center gap-4"
@@ -426,10 +432,10 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
                 }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
-                <span className="text-primary font-mono font-bold text-lg">↵ Enter</span>
+                <span className="text-primary font-mono font-bold text-lg">⌨️ Start Typing</span>
               </motion.div>
               <p className="text-muted-foreground text-sm font-medium">
-                press enter to start
+                click here and start typing
               </p>
             </motion.div>
           </motion.div>

@@ -111,7 +111,16 @@ export function KeybrLessonMode() {
   }, [lesson, typedText, startTime, keystrokes]);
 
   const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (status !== 'running' || !lesson) return;
+    if (!lesson) return;
+    
+    // Start test on first keystroke if idle
+    if (status === 'idle') {
+      setStatus('running');
+      setStartTime(Date.now());
+      startTimeRef.current = Date.now();
+    }
+    
+    if (status === 'finished') return;
     
     const value = e.target.value;
     
@@ -125,6 +134,8 @@ export function KeybrLessonMode() {
         // Wrong character - show error flash but don't accept
         setShowErrorFlash(true);
         setTimeout(() => setShowErrorFlash(false), 150);
+        // Reset input to current typed text to reject the wrong character
+        e.target.value = typedText;
         return;
       }
       
@@ -139,7 +150,7 @@ export function KeybrLessonMode() {
       
       setTypedText(value);
     }
-  }, [status, lesson]);
+  }, [status, lesson, typedText]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (status === 'idle' && e.key === 'Enter') {
@@ -316,7 +327,7 @@ export function KeybrLessonMode() {
         )}
         onClick={() => inputRef.current?.focus()}
       >
-        {/* Hidden Input */}
+        {/* Hidden Input - NOT disabled when idle so user can start typing immediately */}
         <input
           ref={inputRef}
           type="text"
@@ -329,7 +340,7 @@ export function KeybrLessonMode() {
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          disabled={status === 'finished' || status === 'idle'}
+          disabled={status === 'finished'}
         />
         
         {/* Text Display */}
@@ -390,10 +401,11 @@ export function KeybrLessonMode() {
         {/* Start prompt */}
         {status === 'idle' && (
           <motion.div
-            className="absolute inset-0 flex flex-col items-center justify-center bg-card rounded-2xl z-10"
+            className="absolute inset-0 flex flex-col items-center justify-center bg-card/95 rounded-2xl z-10 cursor-text"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
+            onClick={() => inputRef.current?.focus()}
           >
             <motion.div
               className="flex flex-col items-center gap-4"
@@ -408,10 +420,10 @@ export function KeybrLessonMode() {
                 }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
-                <span className="text-primary font-mono font-bold text-lg">↵ Enter</span>
+                <span className="text-primary font-mono font-bold text-lg">⌨️ Start Typing</span>
               </motion.div>
               <p className="text-muted-foreground text-sm font-medium">
-                press enter to start adaptive practice
+                click here and start typing (100% accuracy required)
               </p>
             </motion.div>
           </motion.div>
