@@ -9,15 +9,17 @@ import {
   type Keystroke,
   type KeybrLesson
 } from '@/lib/keybr-engine';
-import { calculateWPM, calculateAccuracy } from '@/lib/typing-engine';
+import { calculateWPM, calculateAccuracy, calculateConsistency } from '@/lib/typing-engine';
 import { LetterProgressPanel } from './LetterProgressPanel';
 import { KeybrResults } from './KeybrResults';
 import { Button } from '@/components/ui/button';
 import { KeyboardVisualizer } from '@/components/typing/KeyboardVisualizer';
+import { useTestResults } from '@/hooks/useTestResults';
 
 type TestStatus = 'idle' | 'running' | 'finished';
 
 export function KeybrLessonMode() {
+  const { saveResult, saveCharacterConfidence } = useTestResults();
   const [status, setStatus] = useState<TestStatus>('idle');
   const [lesson, setLesson] = useState<KeybrLesson | null>(null);
   const [typedText, setTypedText] = useState('');
@@ -30,6 +32,7 @@ export function KeybrLessonMode() {
   const [scrollOffset, setScrollOffset] = useState(0);
   const [currentKeyPressed, setCurrentKeyPressed] = useState<string | undefined>();
   const [errorKeys, setErrorKeys] = useState<Set<string>>(new Set());
+  const [wpmHistory, setWpmHistory] = useState<number[]>([]);
   const [results, setResults] = useState<{
     wpm: number;
     accuracy: number;
@@ -40,6 +43,7 @@ export function KeybrLessonMode() {
   const inputRef = useRef<HTMLInputElement>(null);
   const textDisplayRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
+  const wpmIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Generate lesson on mount
   useEffect(() => {
@@ -56,7 +60,37 @@ export function KeybrLessonMode() {
     setCurrentAccuracy(100);
     setResults(null);
     setScrollOffset(0);
+    setWpmHistory([]);
+    if (wpmIntervalRef.current) {
+      clearInterval(wpmIntervalRef.current);
+      wpmIntervalRef.current = null;
+    }
   }, []);
+
+  // WPM tracking interval
+  useEffect(() => {
+    if (status === 'running' && startTime) {
+      wpmIntervalRef.current = setInterval(() => {
+        if (!lesson) return;
+        const elapsedTime = (Date.now() - startTime) / 1000;
+        let correctChars = 0;
+        for (let i = 0; i < typedText.length; i++) {
+          if (typedText[i] === lesson.text[i]) {
+            correctChars++;
+          }
+        }
+        const wpm = calculateWPM(correctChars, elapsedTime);
+        setWpmHistory(prev => [...prev, wpm]);
+      }, 1000);
+    }
+    
+    return () => {
+      if (wpmIntervalRef.current) {
+        clearInterval(wpmIntervalRef.current);
+        wpmIntervalRef.current = null;
+      }
+    };
+  }, [status, startTime, typedText, lesson]);
 
   // Calculate live stats
   useEffect(() => {
@@ -82,10 +116,16 @@ export function KeybrLessonMode() {
     }
   }, [typedText, lesson, status]);
 
-  const finishTest = useCallback(() => {
+  const finishTest = useCallback(async () => {
     if (!lesson) return;
     
     setStatus('finished');
+    
+    // Clear WPM interval
+    if (wpmIntervalRef.current) {
+      clearInterval(wpmIntervalRef.current);
+      wpmIntervalRef.current = null;
+    }
     
     const elapsedTime = (Date.now() - (startTime || Date.now())) / 1000;
     let correctChars = 0;
@@ -98,6 +138,7 @@ export function KeybrLessonMode() {
     
     const wpm = calculateWPM(correctChars, elapsedTime);
     const accuracy = calculateAccuracy(correctChars, typedText.length);
+    const consistency = calculateConsistency(wpmHistory);
     
     // Calculate per-character metrics
     const perCharMetrics = calculatePerCharMetrics(keystrokes);
@@ -111,7 +152,38 @@ export function KeybrLessonMode() {
       newlyUnlocked,
       perCharMetrics
     });
-  }, [lesson, typedText, startTime, keystrokes]);
+
+    // Save to database
+    await saveResult(
+      {
+        wpm,
+        rawWpm: wpm, // In learn mode, raw = net since only correct chars counted
+        accuracy,
+        consistency,
+        correctChars,
+        incorrectChars: typedText.length - correctChars,
+        totalChars: typedText.length,
+        errors: typedText.length - correctChars,
+        elapsedTime,
+        wpmHistory,
+      },
+      'learn',
+      Math.round(elapsedTime)
+    );
+
+    // Convert perCharMetrics Map to record for saving
+    const charMetricsRecord: Record<string, { char: string; wpm: number; accuracy: number; confidence: number; occurrences: number }> = {};
+    perCharMetrics.forEach((value, key) => {
+      charMetricsRecord[key] = {
+        char: value.char,
+        wpm: value.wpm,
+        accuracy: value.accuracy,
+        confidence: value.confidence,
+        occurrences: value.occurrences,
+      };
+    });
+    await saveCharacterConfidence(charMetricsRecord);
+  }, [lesson, typedText, startTime, keystrokes, wpmHistory, saveResult, saveCharacterConfidence]);
 
   const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (!lesson) return;

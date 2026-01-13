@@ -9,14 +9,18 @@ import { KeybrLessonMode } from '@/components/keybr/KeybrLessonMode';
 import { useTestStore } from '@/stores/test-store';
 import { type TypingStats } from '@/lib/typing-engine';
 import { generateRandomWords, getRandomQuote } from '@/lib/quotes';
+import { useTestResults } from '@/hooks/useTestResults';
 
 const Index = () => {
   const { status, settings, resetTest, setTargetText } = useTestStore();
   const [results, setResults] = useState<(TypingStats & { wpmHistory: number[] }) | null>(null);
+  const { saveResult } = useTestResults();
   
-  const handleTestComplete = useCallback((stats: TypingStats & { wpmHistory: number[] }) => {
+  const handleTestComplete = useCallback(async (stats: TypingStats & { wpmHistory: number[] }) => {
     setResults(stats);
-  }, []);
+    // Save to both localStorage and database
+    await saveResult(stats, settings.mode, settings.duration);
+  }, [saveResult, settings.mode, settings.duration]);
   
   const handleRestart = useCallback(() => {
     setResults(null);

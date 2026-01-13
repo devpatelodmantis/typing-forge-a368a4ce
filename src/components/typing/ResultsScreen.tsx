@@ -2,12 +2,9 @@ import { motion } from 'framer-motion';
 import { StatCard } from './StatCard';
 import { Button } from '@/components/ui/button';
 import { RotateCcw, Share2, TrendingUp } from 'lucide-react';
-import { type TypingStats, saveTestResult, type TestResult } from '@/lib/typing-engine';
+import { type TypingStats } from '@/lib/typing-engine';
 import { useTestStore } from '@/stores/test-store';
-import { useEffect, useRef } from 'react';
 import { 
-  LineChart, 
-  Line, 
   XAxis, 
   YAxis, 
   ResponsiveContainer, 
@@ -24,31 +21,9 @@ interface ResultsScreenProps {
 
 export function ResultsScreen({ stats, onRestart, onNewTest }: ResultsScreenProps) {
   const { settings } = useTestStore();
-  const savedRef = useRef(false);
   
-  // Save result to history (once)
-  useEffect(() => {
-    if (savedRef.current) return;
-    savedRef.current = true;
-    
-    const result: TestResult = {
-      id: Date.now().toString(),
-      wpm: stats.wpm,
-      rawWpm: stats.rawWpm,
-      accuracy: stats.accuracy,
-      consistency: stats.consistency,
-      mode: settings.mode,
-      duration: settings.duration,
-      correctChars: stats.correctChars,
-      incorrectChars: stats.incorrectChars,
-      totalChars: stats.totalChars,
-      errors: stats.errors,
-      date: new Date().toISOString(),
-      wpmHistory: stats.wpmHistory,
-    };
-    
-    saveTestResult(result);
-  }, [stats, settings]);
+  // Results are now saved by parent component (Index.tsx) using useTestResults hook
+  // This component just displays the results
   
   // Prepare chart data
   const chartData = stats.wpmHistory.map((wpm, index) => ({
