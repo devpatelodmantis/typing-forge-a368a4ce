@@ -219,16 +219,8 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     }
   }, [status, startTest, updateTypedText, targetText, typedText.length]);
   
-  // Handle key down events
+  // Handle key down events - NO timer start on Enter, only on first character typed
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    // Start test on Enter key when idle
-    if (status === 'idle' && e.key === 'Enter') {
-      e.preventDefault();
-      startTest();
-      inputRef.current?.focus();
-      return;
-    }
-    
     // Restart on Tab key
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -237,17 +229,18 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
       inputRef.current?.focus();
       return;
     }
-  }, [status, startTest, resetTest, generateText]);
+    
+    // Focus input on Enter when idle (but do NOT start timer)
+    if (status === 'idle' && e.key === 'Enter') {
+      e.preventDefault();
+      inputRef.current?.focus();
+      return;
+    }
+  }, [status, resetTest, generateText]);
   
-  // Global keyboard listener for Enter to start
+  // Global keyboard listener - Tab to restart, Enter to focus
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (status === 'idle' && e.key === 'Enter') {
-        e.preventDefault();
-        startTest();
-        inputRef.current?.focus();
-      }
-      
       // Tab to restart
       if (e.key === 'Tab' && status !== 'finished') {
         e.preventDefault();
@@ -255,11 +248,17 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
         generateText();
         inputRef.current?.focus();
       }
+      
+      // Enter focuses input when idle (does NOT start timer)
+      if (status === 'idle' && e.key === 'Enter') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
     };
     
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [status, startTest, resetTest, generateText]);
+  }, [status, resetTest, generateText]);
   
   // Focus input on click - allow starting by clicking
   const handleClick = useCallback(() => {
@@ -500,10 +499,11 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
                 transition={{ duration: 2, repeat: Infinity }}
                 onClick={handleClick}
               >
-                <span className="text-primary font-mono font-bold text-lg">⌨️ Click to Start</span>
+                <span className="text-primary font-mono font-bold text-lg">⌨️ Click to Focus</span>
               </motion.div>
-              <p className="text-muted-foreground text-sm font-medium">
-                Click here and start typing - timer begins on first keystroke
+              <p className="text-muted-foreground text-sm font-medium text-center max-w-xs">
+                Click here to focus, then start typing.<br/>
+                <span className="text-primary/80">Timer begins on first keystroke</span>
               </p>
             </motion.div>
           </motion.div>

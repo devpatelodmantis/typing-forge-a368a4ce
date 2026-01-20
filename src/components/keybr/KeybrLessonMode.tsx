@@ -241,37 +241,36 @@ export function KeybrLessonMode() {
     }
   }, [status, lesson, typedText]);
 
+  // Handle key down - NO timer start on Enter, only on first character typed
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (status === 'idle' && e.key === 'Enter') {
-      e.preventDefault();
-      setStatus('running');
-      setStartTime(Date.now());
-      startTimeRef.current = Date.now();
-      inputRef.current?.focus();
-      return;
-    }
-    
+    // Tab to generate new lesson
     if (e.key === 'Tab') {
       e.preventDefault();
       generateNewLesson();
       return;
     }
+    
+    // Enter focuses input when idle (does NOT start timer)
+    if (status === 'idle' && e.key === 'Enter') {
+      e.preventDefault();
+      inputRef.current?.focus();
+      return;
+    }
   }, [status, generateNewLesson]);
 
-  // Global keyboard listener
+  // Global keyboard listener - Tab to restart, Enter to focus
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (status === 'idle' && e.key === 'Enter') {
-        e.preventDefault();
-        setStatus('running');
-        setStartTime(Date.now());
-        startTimeRef.current = Date.now();
-        inputRef.current?.focus();
-      }
-      
+      // Tab to generate new lesson
       if (e.key === 'Tab' && status !== 'finished') {
         e.preventDefault();
         generateNewLesson();
+      }
+      
+      // Enter focuses input when idle (does NOT start timer)
+      if (status === 'idle' && e.key === 'Enter') {
+        e.preventDefault();
+        inputRef.current?.focus();
       }
     };
     
@@ -510,10 +509,12 @@ export function KeybrLessonMode() {
                 transition={{ duration: 2, repeat: Infinity }}
                 onClick={() => inputRef.current?.focus()}
               >
-                <span className="text-primary font-mono font-bold text-lg">⌨️ Click to Start</span>
+                <span className="text-primary font-mono font-bold text-lg">⌨️ Click to Focus</span>
               </motion.div>
-              <p className="text-muted-foreground text-sm font-medium">
-                Click here and start typing - timer begins on first keystroke (100% accuracy required)
+              <p className="text-muted-foreground text-sm font-medium text-center max-w-xs">
+                Click here to focus, then start typing.<br/>
+                <span className="text-primary/80">Timer begins on first keystroke</span><br/>
+                <span className="text-warning/80 text-xs">100% accuracy required</span>
               </p>
             </motion.div>
           </motion.div>
