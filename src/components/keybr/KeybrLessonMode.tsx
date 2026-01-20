@@ -487,7 +487,7 @@ export function KeybrLessonMode() {
           ))}
         </div>
         
-        {/* Start prompt */}
+        {/* Start prompt - clicking focuses input so user can type to start */}
         {status === 'idle' && (
           <motion.div
             className="absolute inset-0 flex flex-col items-center justify-center bg-card/95 rounded-2xl z-10 cursor-text"
@@ -502,17 +502,18 @@ export function KeybrLessonMode() {
               animate={{ y: 0, opacity: 1 }}
             >
               <motion.div
-                className="flex items-center gap-2 px-5 py-2.5 bg-primary/10 border border-primary/30 rounded-xl"
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary/10 border border-primary/30 rounded-xl cursor-pointer"
                 whileHover={{ scale: 1.02 }}
                 animate={{ 
                   boxShadow: ['0 0 0px hsl(var(--primary) / 0)', '0 0 20px hsl(var(--primary) / 0.3)', '0 0 0px hsl(var(--primary) / 0)']
                 }}
                 transition={{ duration: 2, repeat: Infinity }}
+                onClick={() => inputRef.current?.focus()}
               >
-                <span className="text-primary font-mono font-bold text-lg">⌨️ Start Typing</span>
+                <span className="text-primary font-mono font-bold text-lg">⌨️ Click to Start</span>
               </motion.div>
               <p className="text-muted-foreground text-sm font-medium">
-                click here and start typing (100% accuracy required)
+                Click here and start typing - timer begins on first keystroke (100% accuracy required)
               </p>
             </motion.div>
           </motion.div>

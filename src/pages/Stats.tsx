@@ -91,18 +91,18 @@ const Stats = () => {
 
   // Filter tests by time period
   const filteredTests = useMemo(() => {
-    let filtered = [...testSessions];
+    let filtered = [...testSessions].filter(t => t.created_at); // Filter out null dates
     
     const now = new Date();
     if (timePeriod === 'week') {
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(t => new Date(t.created_at) >= weekAgo);
+      filtered = filtered.filter(t => t.created_at && new Date(t.created_at) >= weekAgo);
     } else if (timePeriod === 'month') {
       const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(t => new Date(t.created_at) >= monthAgo);
+      filtered = filtered.filter(t => t.created_at && new Date(t.created_at) >= monthAgo);
     } else if (timePeriod === 'year') {
       const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(t => new Date(t.created_at) >= yearAgo);
+      filtered = filtered.filter(t => t.created_at && new Date(t.created_at) >= yearAgo);
     }
     
     // Filter by content type (mode)
@@ -147,7 +147,7 @@ const Stats = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    const todayTests = testSessions.filter(t => new Date(t.created_at) >= today);
+    const todayTests = testSessions.filter(t => t.created_at && new Date(t.created_at) >= today);
     
     if (todayTests.length === 0) {
       return {
@@ -205,8 +205,8 @@ const Stats = () => {
           count: longestStreak.length,
           avgWpm,
           avgAccuracy,
-          startDate: new Date(longestStreak[0].created_at).toLocaleDateString(),
-          endDate: new Date(longestStreak[longestStreak.length - 1].created_at).toLocaleDateString(),
+          startDate: longestStreak[0].created_at ? new Date(longestStreak[0].created_at).toLocaleDateString() : 'N/A',
+          endDate: longestStreak[longestStreak.length - 1].created_at ? new Date(longestStreak[longestStreak.length - 1].created_at).toLocaleDateString() : 'N/A',
         });
       }
     });
@@ -290,6 +290,7 @@ const Stats = () => {
     const activityMap = new Map<string, { lessonsCompleted: number; dailyGoalPercent: number }>();
     
     testSessions.forEach(t => {
+      if (!t.created_at) return; // Skip null dates
       const date = new Date(t.created_at).toISOString().split('T')[0];
       const existing = activityMap.get(date) || { lessonsCompleted: 0, dailyGoalPercent: 0 };
       existing.lessonsCompleted++;

@@ -30,7 +30,7 @@
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 45%;
+    --success: 217 91% 60%;
     --success-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%;
@@ -43,14 +43,14 @@
     --radius: 0.75rem;
 
     /* Custom tokens */
-    --typing-correct: 142 71% 45%;
+    --typing-correct: 217 91% 60%;
     --typing-error: 0 72% 51%;
     --typing-current: 174 80% 40%;
     --typing-upcoming: 220 10% 60%;
     --typing-bg: 220 20% 95%;
 
     --glow-primary: 0 0 40px hsl(174 80% 40% / 0.3);
-    --glow-success: 0 0 30px hsl(142 71% 45% / 0.3);
+    --glow-success: 0 0 30px hsl(217 91% 60% / 0.3);
     --glow-error: 0 0 30px hsl(0 72% 51% / 0.3);
   }
 
@@ -79,7 +79,7 @@
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 50%;
+    --success: 217 91% 65%;
     --success-foreground: 220 25% 6%;
 
     --warning: 38 92% 55%;
@@ -90,14 +90,14 @@
     --ring: 174 80% 50%;
 
     /* Custom tokens - dark */
-    --typing-correct: 142 71% 55%;
+    --typing-correct: 217 91% 65%;
     --typing-error: 0 72% 60%;
     --typing-current: 174 80% 55%;
     --typing-upcoming: 220 10% 40%;
     --typing-bg: 220 25% 8%;
 
     --glow-primary: 0 0 60px hsl(174 80% 50% / 0.25);
-    --glow-success: 0 0 40px hsl(142 71% 50% / 0.25);
+    --glow-success: 0 0 40px hsl(217 91% 65% / 0.25);
     --glow-error: 0 0 40px hsl(0 72% 60% / 0.25);
   }
 }
@@ -125,12 +125,12 @@
   /* Character state styles - Monkeytype-style */
   .char-correct {
     color: hsl(var(--foreground));
-    background-color: hsl(142 71% 45% / 0.25);
+    background-color: hsl(217 91% 60% / 0.25);
     border-radius: 2px;
   }
   
   .dark .char-correct {
-    background-color: hsl(142 71% 35% / 0.4);
+    background-color: hsl(217 91% 50% / 0.4);
   }
 
   .char-error {

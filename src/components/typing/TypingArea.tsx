@@ -261,9 +261,10 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [status, startTest, resetTest, generateText]);
   
-  // Focus input on click
+  // Focus input on click - allow starting by clicking
   const handleClick = useCallback(() => {
     inputRef.current?.focus();
+    // If idle, just focus - typing will start test
   }, []);
   
   // Handle restart
@@ -474,7 +475,7 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
           ))}
         </div>
         
-        {/* Start prompt overlay */}
+        {/* Start prompt overlay - clicking focuses input so user can type to start */}
         {status === 'idle' && (
           <motion.div
             className="absolute inset-0 flex flex-col items-center justify-center bg-card/95 rounded-2xl z-10 cursor-text"
@@ -491,17 +492,18 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
               transition={{ delay: 0.1 }}
             >
               <motion.div
-                className="flex items-center gap-2 px-5 py-2.5 bg-primary/10 border border-primary/30 rounded-xl"
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary/10 border border-primary/30 rounded-xl cursor-pointer"
                 whileHover={{ scale: 1.02 }}
                 animate={{ 
                   boxShadow: ['0 0 0px hsl(var(--primary) / 0)', '0 0 20px hsl(var(--primary) / 0.3)', '0 0 0px hsl(var(--primary) / 0)']
                 }}
                 transition={{ duration: 2, repeat: Infinity }}
+                onClick={handleClick}
               >
-                <span className="text-primary font-mono font-bold text-lg">⌨️ Start Typing</span>
+                <span className="text-primary font-mono font-bold text-lg">⌨️ Click to Start</span>
               </motion.div>
               <p className="text-muted-foreground text-sm font-medium">
-                click here and start typing
+                Click here and start typing - timer begins on first keystroke
               </p>
             </motion.div>
           </motion.div>
