@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import { Keyboard, BarChart3, Trophy, User, LogOut, Swords } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -11,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export function Header() {
+export const Header = forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>((props, ref) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
@@ -100,4 +101,6 @@ export function Header() {
       </div>
     </header>
   );
-}
+});
+
+Header.displayName = 'Header';
