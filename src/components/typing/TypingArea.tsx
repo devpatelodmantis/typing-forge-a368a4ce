@@ -8,13 +8,20 @@ import {
   getCharacterStates,
   type TypingStats 
 } from '@/lib/typing-engine';
+import { type Keystroke } from '@/lib/professional-accuracy';
 import { generateRandomWords, getRandomQuote } from '@/lib/quotes';
 import { cn } from '@/lib/utils';
 import { RotateCcw } from 'lucide-react';
 import { KeyboardVisualizer } from './KeyboardVisualizer';
 
 interface TypingAreaProps {
-  onTestComplete: (stats: TypingStats & { wpmHistory: number[]; backspaceCount: number }) => void;
+  onTestComplete: (stats: TypingStats & { 
+    wpmHistory: number[]; 
+    backspaceCount: number;
+    keystrokeLog: Keystroke[];
+    targetText: string;
+    typedText: string;
+  }) => void;
 }
 
 export function TypingArea({ onTestComplete }: TypingAreaProps) {
@@ -54,6 +61,10 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
   const [backspaceCount, setBackspaceCount] = useState(0);
   const [totalKeystrokes, setTotalKeystrokes] = useState(0);
   
+  // PROFESSIONAL ACCURACY: Track all keystrokes with timestamps
+  const [keystrokeLog, setKeystrokeLog] = useState<Keystroke[]>([]);
+  const testStartTimeRef = useRef<number>(0);
+  
   // Track completed word indices for word-level locking
   const [completedWordEndIndices, setCompletedWordEndIndices] = useState<number[]>([]);
   
@@ -83,6 +94,8 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     setBackspaceCount(0);
     setTotalKeystrokes(0);
     setCompletedWordEndIndices([]);
+    setKeystrokeLog([]);
+    testStartTimeRef.current = 0;
   }, [settings, setTargetText]);
   
   // Pre-calculate word boundaries from target text
@@ -208,21 +221,26 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
         consistency,
         wpmHistory,
         backspaceCount,
+        keystrokeLog,
+        targetText,
+        typedText, // Pass actual typed text
       });
     }
-  }, [status, stats, wpmHistory, onTestComplete, backspaceCount]);
+  }, [status, stats, wpmHistory, onTestComplete, backspaceCount, keystrokeLog, targetText, typedText]);
   
   // Handle keyboard input - start test on first keystroke
   const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     // Start test on first keystroke if idle
     if (status === 'idle') {
       startTest();
+      testStartTimeRef.current = performance.now();
     }
     
     if (status === 'finished') return;
     
     const value = e.target.value;
     const isBackspace = value.length < typedText.length;
+    const currentTimestamp = performance.now() - testStartTimeRef.current;
     
     // WORD-LEVEL LOCKING: Prevent backspace to previous completed words
     if (isBackspace) {
@@ -240,6 +258,16 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
       
       // Track backspace for accuracy penalty
       setBackspaceCount(prev => prev + 1);
+      
+      // Log backspace keystroke
+      setKeystrokeLog(prev => [...prev, {
+        key: 'Backspace',
+        char: '',
+        timestamp: currentTimestamp,
+        position: value.length,
+        expected: targetText[value.length] || '',
+        isCorrect: false,
+      }]);
     }
     
     // Track total keystrokes
@@ -249,6 +277,18 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     if (!isBackspace && value.length > typedText.length) {
       const lastChar = value[value.length - 1];
       const lastIndex = value.length - 1;
+      const expectedChar = targetText[lastIndex];
+      const isCorrect = lastChar === expectedChar;
+      
+      // Log keystroke with full details
+      setKeystrokeLog(prev => [...prev, {
+        key: lastChar,
+        char: lastChar,
+        timestamp: currentTimestamp,
+        position: lastIndex,
+        expected: expectedChar || '',
+        isCorrect,
+      }]);
       
       // If space was typed and it's at a word boundary, lock the word
       if (lastChar === ' ' && wordBoundaries.includes(lastIndex)) {
@@ -258,10 +298,8 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
       // Track current key for keyboard visualization
       setCurrentKeyPressed(lastChar);
       
-      const expectedChar = targetText[value.length - 1];
-      
       // Track error keys
-      if (lastChar !== expectedChar && expectedChar) {
+      if (!isCorrect && expectedChar) {
         setErrorKeys(prev => new Set([...prev, lastChar.toLowerCase()]));
         setTimeout(() => {
           setErrorKeys(prev => {
@@ -389,6 +427,8 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     setCompletedWordEndIndices([]);
     setIsReady(false);
     setShowTabHint(false);
+    setKeystrokeLog([]);
+    testStartTimeRef.current = 0;
     inputRef.current?.focus();
   }, [resetTest, generateText]);
   

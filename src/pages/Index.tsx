@@ -4,20 +4,45 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { TestSettings } from '@/components/typing/TestSettings';
 import { TypingArea } from '@/components/typing/TypingArea';
-import { ResultsScreen } from '@/components/typing/ResultsScreen';
+import { ProfessionalResultsScreen } from '@/components/typing/ProfessionalResultsScreen';
 import { KeybrLessonMode } from '@/components/keybr/KeybrLessonMode';
 import { useTestStore } from '@/stores/test-store';
 import { type TypingStats } from '@/lib/typing-engine';
+import { 
+  generateProfessionalAccuracyReport, 
+  type ProfessionalAccuracyReport,
+  type Keystroke 
+} from '@/lib/professional-accuracy';
 import { generateRandomWords, getRandomQuote } from '@/lib/quotes';
 import { useTestResults } from '@/hooks/useTestResults';
 
 const Index = () => {
   const { status, settings, resetTest, setTargetText } = useTestStore();
-  const [results, setResults] = useState<(TypingStats & { wpmHistory: number[] }) | null>(null);
+  const [results, setResults] = useState<{
+    report: ProfessionalAccuracyReport;
+    wpmHistory: number[];
+  } | null>(null);
   const { saveResult } = useTestResults();
   
-  const handleTestComplete = useCallback(async (stats: TypingStats & { wpmHistory: number[] }) => {
-    setResults(stats);
+  const handleTestComplete = useCallback(async (stats: TypingStats & { 
+    wpmHistory: number[]; 
+    backspaceCount: number;
+    keystrokeLog: Keystroke[];
+    targetText: string;
+    typedText: string;
+  }) => {
+    // Generate professional accuracy report
+    const report = generateProfessionalAccuracyReport(
+      stats.targetText,
+      stats.typedText,
+      stats.keystrokeLog,
+      stats.elapsedTime,
+      stats.backspaceCount,
+      stats.wpmHistory
+    );
+    
+    setResults({ report, wpmHistory: stats.wpmHistory });
+    
     // Save to both localStorage and database
     await saveResult(stats, settings.mode, settings.duration);
   }, [saveResult, settings.mode, settings.duration]);
@@ -74,9 +99,10 @@ const Index = () => {
             {settings.mode === 'keybr' ? (
               <KeybrLessonMode key="keybr" />
             ) : status === 'finished' && results ? (
-              <ResultsScreen 
+              <ProfessionalResultsScreen 
                 key="results"
-                stats={results} 
+                report={results.report}
+                wpmHistory={results.wpmHistory}
                 onRestart={handleRestart}
                 onNewTest={handleNewTest}
               />
