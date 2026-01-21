@@ -187,6 +187,8 @@ export function generateProfessionalAccuracyReport(
   backspaceCount: number,
   wpmHistory: number[]
 ): ProfessionalAccuracyReport {
+  // Use the shorter length for comparison (what was actually typed vs what was expected)
+  const comparisonLength = Math.min(typedText.length, targetText.length);
   const maxLength = Math.max(typedText.length, targetText.length);
   const charComparison: CharComparison[] = [];
   
@@ -204,40 +206,25 @@ export function generateProfessionalAccuracyReport(
   let extraChars = 0;
   let missedChars = 0;
   
-  for (let i = 0; i < maxLength; i++) {
-    const typedChar = typedText[i] || null;
-    const targetChar = targetText[i] || null;
+  // First, compare what was typed against the target
+  for (let i = 0; i < comparisonLength; i++) {
+    const typedChar = typedText[i];
+    const targetChar = targetText[i];
     
     let status: CharComparison['status'] = 'UNTYPED';
     let errorType: string | null = null;
     
-    if (typedChar === null && targetChar !== null) {
-      status = 'MISSED';
-      errorType = 'MISSED_CHAR';
-      missedChars++;
-      if (targetChar) {
-        const charType = getCharType(targetChar);
-        distribution[charType].incorrect++;
-      }
-    } else if (typedChar !== null && targetChar === null) {
-      status = 'EXTRA';
-      errorType = 'EXTRA_CHAR';
-      extraChars++;
-    } else if (typedChar === targetChar) {
+    if (typedChar === targetChar) {
       status = 'CORRECT';
       correctChars++;
-      if (targetChar) {
-        const charType = getCharType(targetChar);
-        distribution[charType].correct++;
-      }
+      const charType = getCharType(targetChar);
+      distribution[charType].correct++;
     } else {
       status = 'INCORRECT';
       errorType = 'TYPO';
       incorrectChars++;
-      if (targetChar) {
-        const charType = getCharType(targetChar);
-        distribution[charType].incorrect++;
-      }
+      const charType = getCharType(targetChar);
+      distribution[charType].incorrect++;
     }
     
     charComparison.push({
@@ -246,6 +233,33 @@ export function generateProfessionalAccuracyReport(
       targetChar,
       status,
       errorType,
+    });
+  }
+  
+  // Handle extra characters (typed more than target)
+  for (let i = comparisonLength; i < typedText.length; i++) {
+    extraChars++;
+    charComparison.push({
+      position: i,
+      typedChar: typedText[i],
+      targetChar: null,
+      status: 'EXTRA',
+      errorType: 'EXTRA_CHAR',
+    });
+  }
+  
+  // Handle missed characters (target longer than typed)
+  for (let i = comparisonLength; i < targetText.length; i++) {
+    missedChars++;
+    const targetChar = targetText[i];
+    const charType = getCharType(targetChar);
+    distribution[charType].incorrect++;
+    charComparison.push({
+      position: i,
+      typedChar: null,
+      targetChar,
+      status: 'MISSED',
+      errorType: 'MISSED_CHAR',
     });
   }
   
@@ -258,21 +272,34 @@ export function generateProfessionalAccuracyReport(
       : 100;
   });
   
-  // Calculate accuracy percentages
+  // Calculate accuracy percentages - CRITICAL FIX
   const totalTypedChars = typedText.length;
   const totalTargetChars = targetText.length;
   
-  const typedAccuracy = totalTypedChars > 0 ? (correctChars / totalTypedChars) * 100 : 0;
-  const targetAccuracy = totalTargetChars > 0 ? (correctChars / totalTargetChars) * 100 : 0;
-  const adjustedAccuracy = totalTargetChars > 0 
-    ? Math.max(0, ((correctChars - extraChars) / totalTargetChars) * 100)
+  // Primary accuracy: based on what was typed (correct / total typed)
+  // This is the standard typing test accuracy formula
+  const typedAccuracy = totalTypedChars > 0 
+    ? (correctChars / totalTypedChars) * 100 
     : 0;
   
-  // Final accuracy: cap at 99.99% if backspace was used
-  let finalAccuracy = Math.round(adjustedAccuracy * 100) / 100;
+  // Target-based accuracy (how much of target was correct)
+  const targetAccuracy = totalTargetChars > 0 
+    ? (correctChars / totalTargetChars) * 100 
+    : 0;
+  
+  // For completed tests, use typed accuracy (correct / total typed)
+  // This matches MonkeyType behavior: accuracy = correct keystrokes / total keystrokes
+  let finalAccuracy = Math.round(typedAccuracy * 100) / 100;
+  
+  // Cap at 99.99% if backspace was used (per memory: strict accuracy enforcement)
   if (backspaceCount > 0 && finalAccuracy >= 100) {
     finalAccuracy = 99.99;
   }
+  
+  // Adjusted accuracy for detailed reporting
+  const adjustedAccuracy = totalTypedChars > 0 
+    ? Math.max(0, ((correctChars) / totalTypedChars) * 100)
+    : 0;
   
   // Analyze errors
   const errors: ErrorAnalysis = {
@@ -325,11 +352,26 @@ export function generateProfessionalAccuracyReport(
     stdDev: Math.round(calculateStdDev(intervals)),
   };
   
-  // Calculate consistency score
-  const coefficientOfVariation = keystrokeIntervals.average > 0 
-    ? (keystrokeIntervals.stdDev / keystrokeIntervals.average) * 100 
-    : 0;
-  const consistencyScore = Math.max(0, Math.min(100, Math.round(100 - coefficientOfVariation)));
+  // Calculate consistency score based on WPM variance (like MonkeyType)
+  // This measures how consistent the typing speed is, not keystroke intervals
+  let consistencyScore = 100;
+  if (wpmHistory.length > 1) {
+    const validWpms = wpmHistory.filter(w => w > 0);
+    if (validWpms.length > 1) {
+      const meanWpm = validWpms.reduce((a, b) => a + b, 0) / validWpms.length;
+      const wpmVariance = validWpms.reduce((sum, val) => sum + Math.pow(val - meanWpm, 2), 0) / validWpms.length;
+      const wpmStdDev = Math.sqrt(wpmVariance);
+      // Coefficient of variation for WPM
+      const wpmCV = meanWpm > 0 ? (wpmStdDev / meanWpm) * 100 : 0;
+      // Convert to 0-100 score where 100 = perfectly consistent
+      // Cap the CV effect at 100% (would give 0 consistency)
+      consistencyScore = Math.max(0, Math.round(100 - Math.min(wpmCV, 100)));
+    }
+  } else if (keystrokeIntervals.average > 0) {
+    // Fallback to keystroke interval consistency if no WPM history
+    const coefficientOfVariation = (keystrokeIntervals.stdDev / keystrokeIntervals.average) * 100;
+    consistencyScore = Math.max(0, Math.min(100, Math.round(100 - Math.min(coefficientOfVariation, 100))));
+  }
   
   // Calculate WPM metrics
   const durationMinutes = durationSeconds / 60;
