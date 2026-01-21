@@ -1,8 +1,9 @@
+import { forwardRef } from 'react';
 import { Github, Twitter, Heart } from 'lucide-react';
 
-export function Footer() {
+export const Footer = forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>((props, ref) => {
   return (
-    <footer className="border-t mt-auto">
+    <footer ref={ref} className="border-t mt-auto" {...props}>
       <div className="container mx-auto px-4 py-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -31,4 +32,6 @@ export function Footer() {
       </div>
     </footer>
   );
-}
+});
+
+Footer.displayName = 'Footer';

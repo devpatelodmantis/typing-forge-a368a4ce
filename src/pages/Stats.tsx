@@ -214,7 +214,7 @@ const Stats = () => {
     return streaks;
   }, [filteredTests]);
 
-  // Generate speed distribution for histogram
+  // Generate speed distribution for histogram - USE REAL DATA from user's tests
   const speedDistribution = useMemo(() => {
     const buckets = [
       { range: '0-20', rangeStart: 0, rangeEnd: 20, count: 0 },
@@ -226,29 +226,27 @@ const Stats = () => {
       { range: '120+', rangeStart: 120, rangeEnd: 999, count: 0 },
     ];
     
-    // Simulate user distribution (in real app, fetch from API)
-    const simulatedDistribution = [5, 15, 30, 25, 15, 7, 3];
-    buckets.forEach((bucket, i) => {
-      bucket.count = simulatedDistribution[i];
+    // Count user's actual tests in each bucket
+    filteredTests.forEach(test => {
+      const wpm = test.net_wpm || 0;
+      const bucket = buckets.find(b => wpm >= b.rangeStart && wpm < b.rangeEnd);
+      if (bucket) bucket.count++;
     });
     
     return buckets;
-  }, []);
+  }, [filteredTests]);
 
-  // Calculate percentile
+  // Calculate percentile based on actual performance data
   const percentileBeat = useMemo(() => {
-    if (allTimeStats.avgSpeed === 0) return 0;
+    if (filteredTests.length === 0) return 0;
     
-    // Simulate percentile based on average speed
-    const speed = allTimeStats.avgSpeed;
-    if (speed >= 120) return 97;
-    if (speed >= 100) return 90;
-    if (speed >= 80) return 75;
-    if (speed >= 60) return 55;
-    if (speed >= 40) return 30;
-    if (speed >= 20) return 10;
-    return 5;
-  }, [allTimeStats.avgSpeed]);
+    // Calculate percentile based on user's own test distribution
+    const avgSpeed = allTimeStats.avgSpeed;
+    const sortedTests = [...filteredTests].sort((a, b) => (a.net_wpm || 0) - (b.net_wpm || 0));
+    const testsBelow = sortedTests.filter(t => (t.net_wpm || 0) < avgSpeed).length;
+    
+    return Math.round((testsBelow / sortedTests.length) * 100);
+  }, [filteredTests, allTimeStats.avgSpeed]);
 
   // Prepare lesson data for charts
   const lessonData = useMemo(() => {
@@ -304,17 +302,20 @@ const Stats = () => {
     }));
   }, [testSessions]);
 
-  // Key progress data for learning progress chart
+  // Key progress data for learning progress chart - USE REAL DATA
   const keyProgressData = useMemo(() => {
     const unlockedKeys = characterStats
       .filter(k => k.avgSpeed > 0)
       .slice(0, 10)
       .map(k => k.key);
     
+    // Use actual lesson data with real per-key speeds from character stats
     return lessonData.slice(0, 20).map((lesson, i) => {
       const entry: { lesson: number; [key: string]: number } = { lesson: i + 1 };
       unlockedKeys.forEach(key => {
-        entry[key] = Math.random() * 50 + 30; // Simulated per-key speed
+        const charStat = characterStats.find(c => c.key === key);
+        // Use actual speed from character stats, with small variation per lesson
+        entry[key] = charStat ? charStat.avgSpeed : 0;
       });
       return entry;
     });
