@@ -14,7 +14,7 @@ import { RotateCcw } from 'lucide-react';
 import { KeyboardVisualizer } from './KeyboardVisualizer';
 
 interface TypingAreaProps {
-  onTestComplete: (stats: TypingStats & { wpmHistory: number[] }) => void;
+  onTestComplete: (stats: TypingStats & { wpmHistory: number[]; backspaceCount: number }) => void;
 }
 
 export function TypingArea({ onTestComplete }: TypingAreaProps) {
@@ -45,6 +45,14 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
   const [zenElapsedTime, setZenElapsedTime] = useState(0);
   const [currentKeyPressed, setCurrentKeyPressed] = useState<string | undefined>();
   const [errorKeys, setErrorKeys] = useState<Set<string>>(new Set());
+  
+  // CRITICAL: Track backspace usage for strict accuracy
+  const [backspaceCount, setBackspaceCount] = useState(0);
+  const [totalKeystrokes, setTotalKeystrokes] = useState(0);
+  
+  // Track completed word indices for word-level locking
+  const [completedWordEndIndices, setCompletedWordEndIndices] = useState<number[]>([]);
+  
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const wpmIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const zenTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -68,14 +76,28 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     }
     setTargetText(text);
     setTimeRemaining(settings.duration);
+    setBackspaceCount(0);
+    setTotalKeystrokes(0);
+    setCompletedWordEndIndices([]);
   }, [settings, setTargetText]);
+  
+  // Pre-calculate word boundaries from target text
+  const wordBoundaries = useMemo(() => {
+    const boundaries: number[] = [];
+    for (let i = 0; i < targetText.length; i++) {
+      if (targetText[i] === ' ') {
+        boundaries.push(i);
+      }
+    }
+    return boundaries;
+  }, [targetText]);
   
   // Initialize text
   useEffect(() => {
     generateText();
   }, [generateText]);
   
-  // Calculate stats
+  // Calculate stats with strict accuracy (backspace = not 100%)
   const stats = useMemo(() => {
     let correctChars = 0;
     let incorrectChars = 0;
@@ -90,7 +112,12 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     
     const elapsedTime = startTime ? (Date.now() - startTime) / 1000 : 0;
     const wpm = calculateWPM(correctChars, elapsedTime);
-    const accuracy = calculateAccuracy(correctChars, typedText.length);
+    
+    // CRITICAL: Calculate accuracy - if backspace used, cap at 99.99%
+    let accuracy = calculateAccuracy(correctChars, typedText.length);
+    if (backspaceCount > 0 && accuracy === 100) {
+      accuracy = 99.99;
+    }
     
     const result = {
       wpm,
@@ -103,7 +130,7 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     
     statsRef.current = result;
     return result;
-  }, [typedText, targetText, startTime]);
+  }, [typedText, targetText, startTime, backspaceCount]);
   
   // Update live stats
   useEffect(() => {
@@ -176,9 +203,10 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
         elapsedTime: stats.elapsedTime,
         consistency,
         wpmHistory,
+        backspaceCount,
       });
     }
-  }, [status, stats, wpmHistory, onTestComplete]);
+  }, [status, stats, wpmHistory, onTestComplete, backspaceCount]);
   
   // Handle keyboard input - start test on first keystroke
   const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,12 +218,42 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     if (status === 'finished') return;
     
     const value = e.target.value;
-    const lastChar = value.slice(-1);
-    const expectedChar = targetText[value.length - 1];
+    const isBackspace = value.length < typedText.length;
     
-    // Track current key for keyboard visualization
-    if (value.length > typedText.length && lastChar) {
+    // WORD-LEVEL LOCKING: Prevent backspace to previous completed words
+    if (isBackspace) {
+      // Find the last completed word boundary
+      const lastCompletedBoundary = completedWordEndIndices.length > 0 
+        ? completedWordEndIndices[completedWordEndIndices.length - 1] 
+        : -1;
+      
+      // If trying to backspace past a completed word, prevent it
+      if (value.length <= lastCompletedBoundary) {
+        e.target.value = typedText;
+        return;
+      }
+      
+      // Track backspace for accuracy penalty
+      setBackspaceCount(prev => prev + 1);
+    }
+    
+    // Track total keystrokes
+    setTotalKeystrokes(prev => prev + 1);
+    
+    // Track word completion (when space is typed after a word)
+    if (!isBackspace && value.length > typedText.length) {
+      const lastChar = value[value.length - 1];
+      const lastIndex = value.length - 1;
+      
+      // If space was typed and it's at a word boundary, lock the word
+      if (lastChar === ' ' && wordBoundaries.includes(lastIndex)) {
+        setCompletedWordEndIndices(prev => [...prev, lastIndex + 1]);
+      }
+      
+      // Track current key for keyboard visualization
       setCurrentKeyPressed(lastChar);
+      
+      const expectedChar = targetText[value.length - 1];
       
       // Track error keys
       if (lastChar !== expectedChar && expectedChar) {
@@ -217,7 +275,7 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     if (value.length <= targetText.length) {
       updateTypedText(value);
     }
-  }, [status, startTest, updateTypedText, targetText, typedText.length]);
+  }, [status, startTest, updateTypedText, targetText, typedText, wordBoundaries, completedWordEndIndices]);
   
   // Handle key down events - NO timer start on Enter, only on first character typed
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -275,27 +333,37 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     setZenElapsedTime(0);
     setCurrentKeyPressed(undefined);
     setErrorKeys(new Set());
+    setBackspaceCount(0);
+    setTotalKeystrokes(0);
+    setCompletedWordEndIndices([]);
     inputRef.current?.focus();
   }, [resetTest, generateText]);
   
   // Define extended type for space handling
-  type ExtendedCharState = ReturnType<typeof getCharacterStates>[0] & { isSpace?: boolean };
+  type ExtendedCharState = ReturnType<typeof getCharacterStates>[0] & { isSpace?: boolean; isLocked?: boolean };
   
-  // Get character states for rendering - grouped by words with space handling
+  // Get character states for rendering - grouped by words with space handling and locking
   const wordGroups = useMemo(() => {
     const states = getCharacterStates(targetText, typedText, typedText.length);
-    const words: { chars: ExtendedCharState[]; hasSpace: boolean; spaceState?: ExtendedCharState }[] = [];
+    const words: { chars: ExtendedCharState[]; hasSpace: boolean; spaceState?: ExtendedCharState; isLocked: boolean }[] = [];
     let currentWord: ExtendedCharState[] = [];
+    let currentWordStartIdx = 0;
     
-    states.forEach((charState) => {
+    states.forEach((charState, idx) => {
       if (charState.char === ' ') {
         if (currentWord.length > 0 || words.length === 0) {
+          // Check if this word is locked (completed)
+          const wordEndIdx = idx;
+          const isLocked = completedWordEndIndices.some(boundary => boundary > currentWordStartIdx && boundary <= wordEndIdx + 1);
+          
           words.push({ 
             chars: currentWord, 
             hasSpace: true,
-            spaceState: { ...charState, isSpace: true }
+            spaceState: { ...charState, isSpace: true },
+            isLocked
           });
           currentWord = [];
+          currentWordStartIdx = idx + 1;
         }
       } else {
         currentWord.push(charState);
@@ -304,11 +372,11 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
     
     // Push last word if any
     if (currentWord.length > 0) {
-      words.push({ chars: currentWord, hasSpace: false });
+      words.push({ chars: currentWord, hasSpace: false, isLocked: false });
     }
     
     return words;
-  }, [targetText, typedText]);
+  }, [targetText, typedText, completedWordEndIndices]);
   
   // Auto-scroll to keep current character visible
   useEffect(() => {
@@ -367,13 +435,20 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
               <div className="flex flex-col items-center">
                 <span className={cn(
                   "text-3xl font-mono font-bold",
-                  currentAccuracy >= 95 ? "text-success" : 
+                  currentAccuracy >= 95 ? "text-primary" : 
                   currentAccuracy >= 90 ? "text-warning" : "text-destructive"
                 )}>
                   {currentAccuracy}%
                 </span>
                 <span className="text-xs uppercase tracking-wider">accuracy</span>
               </div>
+              {/* Show backspace indicator if used */}
+              {backspaceCount > 0 && (
+                <div className="flex flex-col items-center opacity-60">
+                  <span className="text-lg font-mono text-warning">{backspaceCount}</span>
+                  <span className="text-xs uppercase tracking-wider">corrections</span>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -422,12 +497,11 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
           disabled={status === 'finished'}
         />
         
-        {/* Text Display */}
+        {/* Text Display - Paragraph visible underneath when idle */}
         <div 
           ref={textDisplayRef}
           className={cn(
-            "font-mono text-xl md:text-2xl leading-[2.5] select-none max-h-[200px] overflow-hidden transition-all duration-300",
-            status === 'idle' && "opacity-50"
+            "font-mono text-xl md:text-2xl leading-[2.5] select-none max-h-[200px] overflow-hidden transition-all duration-300"
           )}
           style={{
             transform: `translateY(-${scrollOffset * 48}px)`,
@@ -435,7 +509,10 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
           }}
         >
           {wordGroups.map((word, wordIndex) => (
-            <span key={wordIndex} className="inline-block whitespace-nowrap">
+            <span key={wordIndex} className={cn(
+              "inline-block whitespace-nowrap",
+              word.isLocked && "opacity-80"
+            )}>
               {word.chars.map((charState, charIndex) => (
                 <span
                   key={charIndex}
@@ -470,14 +547,18 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
                   {word.spaceState.state === 'upcoming' ? '·' : '\u00A0'}
                 </span>
               )}
+              {/* Lock indicator for completed words */}
+              {word.isLocked && word.hasSpace && (
+                <span className="text-primary/40 text-xs align-super">✓</span>
+              )}
             </span>
           ))}
         </div>
         
-        {/* Start prompt overlay - clicking focuses input so user can type to start */}
+        {/* Start prompt overlay - text visible behind with lower opacity */}
         {status === 'idle' && (
           <motion.div
-            className="absolute inset-0 flex flex-col items-center justify-center bg-card/95 rounded-2xl z-10 cursor-text"
+            className="absolute inset-0 flex flex-col items-center justify-center bg-card/80 backdrop-blur-sm rounded-2xl z-10 cursor-text"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -502,8 +583,9 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
                 <span className="text-primary font-mono font-bold text-lg">⌨️ Click to Focus</span>
               </motion.div>
               <p className="text-muted-foreground text-sm font-medium text-center max-w-xs">
-                Click here to focus, then start typing.<br/>
-                <span className="text-primary/80">Timer begins on first keystroke</span>
+                Click here and start typing.<br/>
+                <span className="text-primary/80">Timer begins on first keystroke</span><br/>
+                <span className="text-warning/80 text-xs">Backspace = accuracy penalty</span>
               </p>
             </motion.div>
           </motion.div>
@@ -537,7 +619,7 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
         )}
       </motion.div>
       
-      {/* Keyboard Visualizer */}
+      {/* Keyboard Visualizer with Toggle */}
       <KeyboardVisualizer 
         currentKey={currentKeyPressed}
         errorKeys={errorKeys}
