@@ -124,13 +124,14 @@
 
   /* Character state styles - Monkeytype-style */
   .char-correct {
-    color: hsl(var(--foreground));
-    background-color: hsl(142 71% 45% / 0.25);
+    color: hsl(142 71% 45%);
+    background-color: hsl(142 71% 45% / 0.15);
     border-radius: 2px;
   }
   
   .dark .char-correct {
-    background-color: hsl(142 71% 40% / 0.4);
+    color: hsl(142 71% 55%);
+    background-color: hsl(142 71% 40% / 0.25);
   }
 
   .char-error {
