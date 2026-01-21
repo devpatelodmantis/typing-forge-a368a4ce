@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -24,14 +25,14 @@ const sizeStyles = {
   lg: 'text-4xl md:text-5xl',
 };
 
-export function StatCard({
+export const StatCard = forwardRef<HTMLDivElement, StatCardProps>(({
   label,
   value,
   suffix,
   variant = 'default',
   size = 'md',
   animate = true,
-}: StatCardProps) {
+}, ref) => {
   const content = (
     <>
       <span className="stat-label">{label}</span>
@@ -49,6 +50,7 @@ export function StatCard({
   if (animate) {
     return (
       <motion.div
+        ref={ref}
         className="stat-card flex flex-col items-center justify-center gap-2 text-center"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -60,8 +62,10 @@ export function StatCard({
   }
   
   return (
-    <div className="stat-card flex flex-col items-center justify-center gap-2 text-center">
+    <div ref={ref} className="stat-card flex flex-col items-center justify-center gap-2 text-center">
       {content}
     </div>
   );
-}
+});
+
+StatCard.displayName = 'StatCard';

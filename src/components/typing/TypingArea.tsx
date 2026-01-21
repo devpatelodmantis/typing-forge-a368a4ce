@@ -231,8 +231,9 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
         ? completedWordEndIndices[completedWordEndIndices.length - 1] 
         : -1;
       
-      // If trying to backspace past a completed word, prevent it
-      if (value.length <= lastCompletedBoundary) {
+      // If trying to backspace past a completed word boundary, prevent it
+      // User can backspace within current word (even if first char of new word)
+      if (value.length < lastCompletedBoundary) {
         e.target.value = typedText;
         return;
       }
@@ -600,10 +601,7 @@ export function TypingArea({ onTestComplete }: TypingAreaProps) {
                   {word.spaceState.state === 'upcoming' ? '·' : '\u00A0'}
                 </span>
               )}
-              {/* Lock indicator for completed words */}
-              {word.isLocked && word.hasSpace && (
-                <span className="text-primary/40 text-xs align-super">✓</span>
-              )}
+              {/* No visual lock indicator - just prevent backspace */}
             </span>
           ))}
         </div>
