@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import React, { forwardRef } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -25,47 +25,52 @@ const sizeStyles = {
   lg: 'text-4xl md:text-5xl',
 };
 
-export const StatCard = forwardRef<HTMLDivElement, StatCardProps>(({
-  label,
-  value,
-  suffix,
-  variant = 'default',
-  size = 'md',
-  animate = true,
-}, ref) => {
-  const content = (
-    <>
-      <span className="stat-label">{label}</span>
-      <div className="flex items-baseline gap-1">
-        <span className={cn('stat-value', variantStyles[variant], sizeStyles[size])}>
-          {value}
-        </span>
-        {suffix && (
-          <span className="text-sm text-muted-foreground">{suffix}</span>
-        )}
-      </div>
-    </>
-  );
+const StatCardComponent = forwardRef<HTMLDivElement, StatCardProps>(
+  function StatCard(
+    {
+      label,
+      value,
+      suffix,
+      variant = 'default',
+      size = 'md',
+      animate = true,
+    },
+    ref
+  ) {
+    const content = (
+      <>
+        <span className="stat-label">{label}</span>
+        <div className="flex items-baseline gap-1">
+          <span className={cn('stat-value', variantStyles[variant], sizeStyles[size])}>
+            {value}
+          </span>
+          {suffix && (
+            <span className="text-sm text-muted-foreground">{suffix}</span>
+          )}
+        </div>
+      </>
+    );
 
-  if (animate) {
+    if (animate) {
+      return (
+        <motion.div
+          ref={ref}
+          className="stat-card flex flex-col items-center justify-center gap-2 text-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          {content}
+        </motion.div>
+      );
+    }
+
     return (
-      <motion.div
-        ref={ref}
-        className="stat-card flex flex-col items-center justify-center gap-2 text-center"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
+      <div ref={ref} className="stat-card flex flex-col items-center justify-center gap-2 text-center">
         {content}
-      </motion.div>
+      </div>
     );
   }
-  
-  return (
-    <div ref={ref} className="stat-card flex flex-col items-center justify-center gap-2 text-center">
-      {content}
-    </div>
-  );
-});
+);
 
-StatCard.displayName = 'StatCard';
+export { StatCardComponent as StatCard };
