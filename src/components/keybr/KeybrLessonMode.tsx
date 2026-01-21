@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { RotateCcw, Sparkles, Trophy, Zap } from 'lucide-react';
+import { RotateCcw, Sparkles, Zap } from 'lucide-react';
 import { 
   generateKeybrLesson,
   calculatePerCharMetrics,
@@ -12,7 +12,6 @@ import {
 import { calculateWPM, calculateAccuracy, calculateConsistency } from '@/lib/typing-engine';
 import { LetterProgressPanel } from './LetterProgressPanel';
 import { KeybrResults } from './KeybrResults';
-import { Button } from '@/components/ui/button';
 import { KeyboardVisualizer } from '@/components/typing/KeyboardVisualizer';
 import { useTestResults } from '@/hooks/useTestResults';
 
@@ -33,6 +32,13 @@ export function KeybrLessonMode() {
   const [currentKeyPressed, setCurrentKeyPressed] = useState<string | undefined>();
   const [errorKeys, setErrorKeys] = useState<Set<string>>(new Set());
   const [wpmHistory, setWpmHistory] = useState<number[]>([]);
+  
+  // Track backspace attempts (for logging, even though learn mode rejects them)
+  const [backspaceAttempts, setBackspaceAttempts] = useState(0);
+  
+  // Word-level locking for learn mode too
+  const [completedWordEndIndices, setCompletedWordEndIndices] = useState<number[]>([]);
+  
   const [results, setResults] = useState<{
     wpm: number;
     accuracy: number;
@@ -44,6 +50,18 @@ export function KeybrLessonMode() {
   const textDisplayRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
   const wpmIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Pre-calculate word boundaries
+  const wordBoundaries = useMemo(() => {
+    if (!lesson) return [];
+    const boundaries: number[] = [];
+    for (let i = 0; i < lesson.text.length; i++) {
+      if (lesson.text[i] === ' ') {
+        boundaries.push(i);
+      }
+    }
+    return boundaries;
+  }, [lesson]);
 
   // Generate lesson on mount
   useEffect(() => {
@@ -61,6 +79,8 @@ export function KeybrLessonMode() {
     setResults(null);
     setScrollOffset(0);
     setWpmHistory([]);
+    setBackspaceAttempts(0);
+    setCompletedWordEndIndices([]);
     if (wpmIntervalRef.current) {
       clearInterval(wpmIntervalRef.current);
       wpmIntervalRef.current = null;
@@ -198,11 +218,34 @@ export function KeybrLessonMode() {
     if (status === 'finished') return;
     
     const value = e.target.value;
+    const isBackspace = value.length < typedText.length;
+    
+    // WORD-LEVEL LOCKING: Prevent backspace to previous completed words
+    if (isBackspace) {
+      const lastCompletedBoundary = completedWordEndIndices.length > 0 
+        ? completedWordEndIndices[completedWordEndIndices.length - 1] 
+        : -1;
+      
+      // If trying to backspace past a completed word, prevent it
+      if (value.length <= lastCompletedBoundary) {
+        e.target.value = typedText;
+        setBackspaceAttempts(prev => prev + 1);
+        return;
+      }
+      
+      // Learn mode: reject all backspaces within current word too (100% accuracy requirement)
+      setShowErrorFlash(true);
+      setTimeout(() => setShowErrorFlash(false), 150);
+      setBackspaceAttempts(prev => prev + 1);
+      e.target.value = typedText;
+      return;
+    }
     
     if (value.length <= lesson.text.length) {
       // Get the new character typed
       const newChar = value[value.length - 1];
       const expectedChar = lesson.text[value.length - 1];
+      const charIndex = value.length - 1;
       
       // Track current key for keyboard visualization
       if (newChar) {
@@ -228,6 +271,11 @@ export function KeybrLessonMode() {
         return;
       }
       
+      // Track word completion (when space is typed at word boundary)
+      if (newChar === ' ' && wordBoundaries.includes(charIndex)) {
+        setCompletedWordEndIndices(prev => [...prev, charIndex + 1]);
+      }
+      
       if (newChar) {
         setKeystrokes(prev => [...prev, {
           char: newChar,
@@ -239,7 +287,7 @@ export function KeybrLessonMode() {
       
       setTypedText(value);
     }
-  }, [status, lesson, typedText]);
+  }, [status, lesson, typedText, wordBoundaries, completedWordEndIndices]);
 
   // Handle key down - NO timer start on Enter, only on first character typed
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -278,14 +326,15 @@ export function KeybrLessonMode() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [status, generateNewLesson]);
 
-  // Word groups for display with space state
+  // Word groups for display with space state and locking
   type CharState = { char: string; state: string; isSpace?: boolean };
   
   const wordGroups = useMemo(() => {
     if (!lesson) return [];
     
-    const words: { chars: CharState[]; hasSpace: boolean; spaceState?: CharState }[] = [];
+    const words: { chars: CharState[]; hasSpace: boolean; spaceState?: CharState; isLocked: boolean }[] = [];
     let currentWord: CharState[] = [];
+    let currentWordStartIdx = 0;
     
     for (let i = 0; i < lesson.text.length; i++) {
       const char = lesson.text[i];
@@ -302,12 +351,17 @@ export function KeybrLessonMode() {
       
       if (char === ' ') {
         if (currentWord.length > 0 || words.length === 0) {
+          const wordEndIdx = i;
+          const isLocked = completedWordEndIndices.some(boundary => boundary > currentWordStartIdx && boundary <= wordEndIdx + 1);
+          
           words.push({ 
             chars: currentWord, 
             hasSpace: true,
-            spaceState: { char: ' ', state, isSpace: true }
+            spaceState: { char: ' ', state, isSpace: true },
+            isLocked
           });
           currentWord = [];
+          currentWordStartIdx = i + 1;
         }
       } else {
         currentWord.push({ char, state });
@@ -315,11 +369,11 @@ export function KeybrLessonMode() {
     }
     
     if (currentWord.length > 0) {
-      words.push({ chars: currentWord, hasSpace: false });
+      words.push({ chars: currentWord, hasSpace: false, isLocked: false });
     }
     
     return words;
-  }, [lesson, typedText]);
+  }, [lesson, typedText, completedWordEndIndices]);
   
   // Auto-scroll to keep current character visible
   useEffect(() => {
@@ -394,7 +448,7 @@ export function KeybrLessonMode() {
             <div className="flex flex-col items-center">
               <span className={cn(
                 "text-3xl font-mono font-bold",
-                currentAccuracy >= 95 ? "text-success" : 
+                currentAccuracy >= 95 ? "text-primary" : 
                 currentAccuracy >= 90 ? "text-warning" : "text-destructive"
               )}>
                 {currentAccuracy}%
@@ -435,8 +489,7 @@ export function KeybrLessonMode() {
         <div 
           ref={textDisplayRef}
           className={cn(
-            "font-mono text-xl md:text-2xl leading-[2.5] select-none max-h-[200px] overflow-hidden transition-all duration-300",
-            status === 'idle' && "opacity-50"
+            "font-mono text-xl md:text-2xl leading-[2.5] select-none max-h-[200px] overflow-hidden transition-all duration-300"
           )}
           style={{
             transform: `translateY(-${scrollOffset * 48}px)`,
@@ -444,7 +497,10 @@ export function KeybrLessonMode() {
           }}
         >
           {wordGroups.map((word, wordIndex) => (
-            <span key={wordIndex} className="inline-block whitespace-nowrap">
+            <span key={wordIndex} className={cn(
+              "inline-block whitespace-nowrap",
+              word.isLocked && "opacity-80"
+            )}>
               {word.chars.map((charState, charIndex) => (
                 <span
                   key={charIndex}
@@ -482,14 +538,18 @@ export function KeybrLessonMode() {
                   {word.spaceState.state === 'upcoming' ? '·' : '\u00A0'}
                 </span>
               )}
+              {/* Lock indicator for completed words */}
+              {word.isLocked && word.hasSpace && (
+                <span className="text-primary/40 text-xs align-super">✓</span>
+              )}
             </span>
           ))}
         </div>
         
-        {/* Start prompt - clicking focuses input so user can type to start */}
+        {/* Start prompt - text visible behind with lower opacity */}
         {status === 'idle' && (
           <motion.div
-            className="absolute inset-0 flex flex-col items-center justify-center bg-card/95 rounded-2xl z-10 cursor-text"
+            className="absolute inset-0 flex flex-col items-center justify-center bg-card/80 backdrop-blur-sm rounded-2xl z-10 cursor-text"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -512,9 +572,9 @@ export function KeybrLessonMode() {
                 <span className="text-primary font-mono font-bold text-lg">⌨️ Click to Focus</span>
               </motion.div>
               <p className="text-muted-foreground text-sm font-medium text-center max-w-xs">
-                Click here to focus, then start typing.<br/>
+                Click here and start typing.<br/>
                 <span className="text-primary/80">Timer begins on first keystroke</span><br/>
-                <span className="text-warning/80 text-xs">100% accuracy required</span>
+                <span className="text-warning/80 text-xs">100% accuracy required • No backspace</span>
               </p>
             </motion.div>
           </motion.div>
@@ -542,7 +602,7 @@ export function KeybrLessonMode() {
         <LetterProgressPanel />
       </div>
       
-      {/* Keyboard Visualizer */}
+      {/* Keyboard Visualizer with Toggle */}
       <KeyboardVisualizer 
         currentKey={currentKeyPressed}
         errorKeys={errorKeys}

@@ -15,16 +15,22 @@ export function useTestResults() {
   const { user } = useAuth();
 
   const saveResult = useCallback(async (
-    stats: TypingStats & { wpmHistory: number[] },
+    stats: TypingStats & { wpmHistory: number[]; backspaceCount?: number },
     mode: string,
     duration: number
   ) => {
+    // CRITICAL: If backspace was used, cap accuracy at 99.99%
+    let finalAccuracy = stats.accuracy;
+    if (stats.backspaceCount && stats.backspaceCount > 0 && finalAccuracy === 100) {
+      finalAccuracy = 99.99;
+    }
+    
     // Always save to localStorage
     const localResult: TestResult = {
       id: crypto.randomUUID(),
       wpm: stats.wpm,
       rawWpm: stats.rawWpm,
-      accuracy: stats.accuracy,
+      accuracy: finalAccuracy,
       consistency: stats.consistency,
       mode,
       duration,
@@ -40,14 +46,14 @@ export function useTestResults() {
     // If logged in, also save to database
     if (user) {
       try {
-        // Save test session
+        // Save test session with strict accuracy
         await supabase.from('test_sessions').insert({
           user_id: user.id,
           test_mode: mode,
           duration_seconds: duration,
           gross_wpm: stats.rawWpm,
           net_wpm: stats.wpm,
-          accuracy_percent: stats.accuracy,
+          accuracy_percent: finalAccuracy, // Use final accuracy (capped if backspace used)
           consistency_percent: stats.consistency,
           total_characters: stats.totalChars,
           correct_characters: stats.correctChars,
@@ -65,7 +71,7 @@ export function useTestResults() {
         if (existingEntry) {
           const testsCompleted = existingEntry.tests_completed + 1;
           const newAvgWpm = ((existingEntry.wpm_avg * existingEntry.tests_completed) + stats.wpm) / testsCompleted;
-          const newAvgAccuracy = ((existingEntry.accuracy_avg * existingEntry.tests_completed) + stats.accuracy) / testsCompleted;
+          const newAvgAccuracy = ((existingEntry.accuracy_avg * existingEntry.tests_completed) + finalAccuracy) / testsCompleted;
           const newAvgConsistency = ((existingEntry.consistency_avg * existingEntry.tests_completed) + stats.consistency) / testsCompleted;
 
           await supabase
@@ -85,7 +91,7 @@ export function useTestResults() {
             user_id: user.id,
             wpm_best: stats.wpm,
             wpm_avg: stats.wpm,
-            accuracy_avg: stats.accuracy,
+            accuracy_avg: finalAccuracy, // Use final accuracy
             consistency_avg: stats.consistency,
             tests_completed: 1,
             total_characters: stats.totalChars,
