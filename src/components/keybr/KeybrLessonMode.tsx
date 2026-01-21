@@ -485,11 +485,12 @@ export function KeybrLessonMode() {
           disabled={status === 'finished'}
         />
         
-        {/* Text Display */}
+        {/* Text Display - Paragraph always visible, especially behind idle overlay */}
         <div 
           ref={textDisplayRef}
           className={cn(
-            "font-mono text-xl md:text-2xl leading-[2.5] select-none max-h-[200px] overflow-hidden transition-all duration-300"
+            "font-mono text-xl md:text-2xl leading-[2.5] select-none max-h-[200px] overflow-hidden transition-all duration-300",
+            status === 'idle' && "opacity-70" // Make text visible behind overlay
           )}
           style={{
             transform: `translateY(-${scrollOffset * 48}px)`,
@@ -546,10 +547,10 @@ export function KeybrLessonMode() {
           ))}
         </div>
         
-        {/* Start prompt - text visible behind with lower opacity */}
+        {/* Start prompt - 50% transparency so paragraph is clearly visible */}
         {status === 'idle' && (
           <motion.div
-            className="absolute inset-0 flex flex-col items-center justify-center bg-card/80 backdrop-blur-sm rounded-2xl z-10 cursor-text"
+            className="absolute inset-0 flex flex-col items-center justify-center bg-card/50 rounded-2xl z-10 cursor-text"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
