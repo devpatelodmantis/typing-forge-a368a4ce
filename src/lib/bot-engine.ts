@@ -6,6 +6,7 @@
 import { calculateWpm, calculateProgress } from './metrics-engine';
 
 export type BotLevel = 'beginner' | 'intermediate' | 'pro';
+export type BotDifficulty = BotLevel; // Alias for compatibility
 
 export interface BotConfig {
   level: BotLevel;
@@ -38,6 +39,7 @@ export interface BotState {
   progress: number;
   isFinished: boolean;
   correctChars: number;
+  accuracy: number;
 }
 
 // Bot configurations by level
@@ -157,7 +159,7 @@ function getTypoChar(expectedChar: string): string {
 /**
  * Create a new bot instance
  */
-export function createBot(level: BotLevel, targetText: string): BotState {
+export function createBotState(level: BotLevel, targetText: string): BotState {
   const config = { ...BOT_CONFIGS[level] };
   
   // Add some variance to make each bot unique
@@ -177,6 +179,57 @@ export function createBot(level: BotLevel, targetText: string): BotState {
     progress: 0,
     isFinished: false,
     correctChars: 0,
+    accuracy: 100,
+  };
+}
+
+/**
+ * Interactive bot runner for client-side use
+ */
+export interface BotRunner {
+  state: BotState;
+  start: () => void;
+  tick: () => BotState;
+  isFinished: () => boolean;
+}
+
+export function createBot(level: BotLevel, targetText: string): BotRunner {
+  let state = createBotState(level, targetText);
+  let nextKeystrokeTime = 0;
+  let isStarted = false;
+
+  return {
+    get state() { return state; },
+    
+    start() {
+      isStarted = true;
+      state = { ...state, startTime: performance.now() };
+      nextKeystrokeTime = performance.now() + getNextKeystrokeDelay(state);
+    },
+    
+    tick(): BotState {
+      if (!isStarted || state.isFinished) return state;
+      
+      const now = performance.now();
+      
+      // Process keystrokes that should have happened by now
+      while (now >= nextKeystrokeTime && !state.isFinished) {
+        state = simulateKeystroke(state, now);
+        nextKeystrokeTime = now + getNextKeystrokeDelay(state);
+      }
+      
+      // Update accuracy
+      const totalTyped = state.typedText.length;
+      state.accuracy = totalTyped > 0 
+        ? Math.round((state.correctChars / totalTyped) * 100) 
+        : 100;
+      
+      return state;
+    },
+    
+    isFinished() {
+      return state.isFinished;
+    }
   };
 }
 
@@ -308,7 +361,7 @@ export function simulateFullRace(
   targetText: string,
   updateIntervalMs: number = 200
 ): BotUpdate[] {
-  let bot = createBot(level, targetText);
+  let bot = createBotState(level, targetText);
   const updates: BotUpdate[] = [];
   let currentTime = 0;
   let nextUpdateTime = 0;

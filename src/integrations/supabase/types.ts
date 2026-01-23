@@ -190,6 +190,8 @@ export type Database = {
       }
       race_sessions: {
         Row: {
+          bot_difficulty: string | null
+          countdown_started_at: string | null
           created_at: string | null
           ended_at: string | null
           expected_text: string
@@ -198,6 +200,7 @@ export type Database = {
           host_progress: number | null
           host_wpm: number | null
           id: string
+          is_bot_race: boolean | null
           opponent_accuracy: number | null
           opponent_id: string | null
           opponent_progress: number | null
@@ -205,9 +208,12 @@ export type Database = {
           room_code: string
           started_at: string | null
           status: string | null
+          version: number
           winner_id: string | null
         }
         Insert: {
+          bot_difficulty?: string | null
+          countdown_started_at?: string | null
           created_at?: string | null
           ended_at?: string | null
           expected_text: string
@@ -216,6 +222,7 @@ export type Database = {
           host_progress?: number | null
           host_wpm?: number | null
           id?: string
+          is_bot_race?: boolean | null
           opponent_accuracy?: number | null
           opponent_id?: string | null
           opponent_progress?: number | null
@@ -223,9 +230,12 @@ export type Database = {
           room_code: string
           started_at?: string | null
           status?: string | null
+          version?: number
           winner_id?: string | null
         }
         Update: {
+          bot_difficulty?: string | null
+          countdown_started_at?: string | null
           created_at?: string | null
           ended_at?: string | null
           expected_text?: string
@@ -234,6 +244,7 @@ export type Database = {
           host_progress?: number | null
           host_wpm?: number | null
           id?: string
+          is_bot_race?: boolean | null
           opponent_accuracy?: number | null
           opponent_id?: string | null
           opponent_progress?: number | null
@@ -241,6 +252,7 @@ export type Database = {
           room_code?: string
           started_at?: string | null
           status?: string | null
+          version?: number
           winner_id?: string | null
         }
         Relationships: []
