@@ -73,6 +73,7 @@ export interface ProfessionalAccuracyReport {
     extraChars: number;
     missedChars: number;
     totalTargetChars: number;
+    totalTypedChars: number;
     backspaceUsed: boolean;
     backspaceCount: number;
   };
@@ -187,12 +188,13 @@ export function generateProfessionalAccuracyReport(
   backspaceCount: number,
   wpmHistory: number[]
 ): ProfessionalAccuracyReport {
-  // Use the shorter length for comparison (what was actually typed vs what was expected)
+  // CRITICAL FIX: For time-based tests, only analyze what was actually typed
+  // Don't count untyped remaining text as "missed" errors
+  // The comparison should be based on the shorter of the two texts
   const comparisonLength = Math.min(typedText.length, targetText.length);
-  const maxLength = Math.max(typedText.length, targetText.length);
   const charComparison: CharComparison[] = [];
   
-  // Character type distribution
+  // Character type distribution - only count what was actually typed
   const distribution: CharTypeDistribution = {
     letters: { correct: 0, incorrect: 0, accuracy: 0 },
     numbers: { correct: 0, incorrect: 0, accuracy: 0 },
@@ -204,9 +206,11 @@ export function generateProfessionalAccuracyReport(
   let correctChars = 0;
   let incorrectChars = 0;
   let extraChars = 0;
+  // CRITICAL FIX: missedChars should NOT count untyped remaining text
+  // It should only count actual skipped characters within what was attempted
   let missedChars = 0;
   
-  // First, compare what was typed against the target
+  // Compare only what was typed against the corresponding target characters
   for (let i = 0; i < comparisonLength; i++) {
     const typedChar = typedText[i];
     const targetChar = targetText[i];
@@ -236,7 +240,7 @@ export function generateProfessionalAccuracyReport(
     });
   }
   
-  // Handle extra characters (typed more than target)
+  // Handle extra characters ONLY if typed more than target (rare case)
   for (let i = comparisonLength; i < typedText.length; i++) {
     extraChars++;
     charComparison.push({
@@ -248,20 +252,9 @@ export function generateProfessionalAccuracyReport(
     });
   }
   
-  // Handle missed characters (target longer than typed)
-  for (let i = comparisonLength; i < targetText.length; i++) {
-    missedChars++;
-    const targetChar = targetText[i];
-    const charType = getCharType(targetChar);
-    distribution[charType].incorrect++;
-    charComparison.push({
-      position: i,
-      typedChar: null,
-      targetChar,
-      status: 'MISSED',
-      errorType: 'MISSED_CHAR',
-    });
-  }
+  // NOTE: We intentionally do NOT count remaining untyped text as "missed"
+  // For time-based tests, not finishing the entire text is expected behavior
+  // "Missed" should only apply to characters that were actually skipped mid-typing
   
   // Calculate distribution accuracies
   Object.keys(distribution).forEach((key) => {
@@ -334,8 +327,9 @@ export function generateProfessionalAccuracyReport(
     }
   });
   
-  errors.errorRate = totalTargetChars > 0 
-    ? Math.round((errors.totalErrors / totalTargetChars) * 10000) / 100 
+  // CRITICAL FIX: Calculate error rate based on what was actually typed, not total target
+  errors.errorRate = totalTypedChars > 0 
+    ? Math.round((errors.totalErrors / totalTypedChars) * 10000) / 100 
     : 0;
   
   // Calculate keystroke intervals
@@ -508,8 +502,9 @@ export function generateProfessionalAccuracyReport(
       correctChars,
       incorrectChars,
       extraChars,
-      missedChars,
+      missedChars, // Will be 0 for time-based tests since we don't count untyped text
       totalTargetChars,
+      totalTypedChars,
       backspaceUsed: backspaceCount > 0,
       backspaceCount,
     },

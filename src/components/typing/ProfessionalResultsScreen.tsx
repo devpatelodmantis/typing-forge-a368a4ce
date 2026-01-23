@@ -510,7 +510,7 @@ export function ProfessionalResultsScreen({
         <span>•</span>
         <span className="capitalize">{settings.mode} mode</span>
         <span>•</span>
-        <span>{report.accuracy.totalTargetChars} characters</span>
+        <span>{report.accuracy.totalTypedChars} characters typed</span>
       </motion.div>
       
       {/* Action Buttons */}
