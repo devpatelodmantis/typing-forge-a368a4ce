@@ -44,10 +44,7 @@ export const RaceLobby = ({ user, onCreateRace, onJoinRace, onCreateBotRace }: R
       exit={{ opacity: 0, y: -20 }}
       className="max-w-lg mx-auto text-center"
     >
-      <div className="flex items-center justify-center gap-3 mb-8">
-        <Swords className="w-10 h-10 text-primary" />
-        <h1 className="text-3xl font-bold">Multiplayer Race</h1>
-      </div>
+      {/* Removed duplicate title - now in Race.tsx */}
 
       {/* Race vs Human */}
       <div className="stat-card p-6 mb-4">
